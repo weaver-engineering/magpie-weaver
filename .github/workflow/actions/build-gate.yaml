@@ -1,0 +1,258 @@
+name: Build Gate
+
+# Build Gate: PR from test/{ref} -> build/{ref}
+# Validates the 2 inbound commits (specification-commit, test-commit).
+# Human approval (required reviewers) and human override (admin bypass of a
+# failing required check) are configured in branch protection, not here.
+
+on:
+  pull_request:
+    branches:
+      - 'build/**'
+
+concurrency:
+  group: build-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: write
+
+jobs:
+  validate-build-gate:
+    if: startsWith(github.head_ref, 'test/')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout PR head (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Derive {ref} and verify branch pairing
+        id: ref
+        run: |
+          HEAD_REF="${{ github.head_ref }}"
+          BASE_REF="${{ github.event.pull_request.base.ref }}"
+          ERRORS=""
+
+          REF="${HEAD_REF#test/}"
+          if [ -z "$REF" ] || [ "$REF" = "$HEAD_REF" ]; then
+            ERRORS="${ERRORS}The branch of the PR must match \`build/{ref}\`, e.g. 'build/MAG-30'"$'\n'
+          fi
+
+          if ! printf '%s' "$REF" | grep -Eq '^[A-Z]+-[0-9]+$'; then
+            ERRORS="${ERRORS}The branch of the PR must match \`build/{ref}\`, e.g. 'build/MAG-30'"$'\n'
+            REF=""
+          fi
+
+          if [ -n "$REF" ] && [ "$BASE_REF" != "build/$REF" ]; then
+            ERRORS="${ERRORS}The branch of the PR must match \`build/{ref}\`, e.g. 'build/MAG-30'"$'\n'
+          fi
+
+          if [ -n "$ERRORS" ]; then
+            printf '%s' "$ERRORS" > .build-gate-error
+            printf '%s' "$ERRORS" | while IFS= read -r line; do echo "::error::$line"; done
+            exit 1
+          fi
+
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "Derived ref: $REF"
+
+      - name: Validate PR title starts with {ref}
+        env:
+          REF: ${{ steps.ref.outputs.ref }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if ! printf '%s' "$TITLE" | grep -Eq "^$REF"; then
+            echo "The title of the PR must start with \`{ref}\`, e.g. 'MAG-30'" > .build-gate-error
+            echo "::error::PR title \"$TITLE\" does not start with ref \"$REF\""
+            exit 1
+          fi
+
+      - name: Identify the 2 inbound commits
+        id: commits
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          COMMITS=$(git rev-list --reverse "$BASE_SHA".."$HEAD_SHA")
+          COUNT=$(printf '%s\n' "$COMMITS" | grep -c . || true)
+          ERRORS=""
+
+          if [ "$COUNT" -lt 2 ]; then
+            ERRORS="${ERRORS}PRs to build must contain 2 commits."$'\n'
+          fi
+
+          if [ "$COUNT" -gt 2 ]; then
+            ERRORS="${ERRORS}PRs to build must contain 2 commits."$'\n'
+          fi
+
+          if [ -n "$ERRORS" ]; then
+            printf '%s' "$ERRORS" > .build-gate-error
+            printf '%s' "$ERRORS" | while IFS= read -r line; do echo "::error::$line"; done
+            exit 1
+          fi
+
+          SPEC_SHA=$(printf '%s\n' "$COMMITS" | sed -n '1p')
+          TEST_SHA=$(printf '%s\n' "$COMMITS" | sed -n '2p')
+
+          echo "spec_sha=$SPEC_SHA" >> "$GITHUB_OUTPUT"
+          echo "test_sha=$TEST_SHA" >> "$GITHUB_OUTPUT"
+          echo "Specification commit: $SPEC_SHA"
+          echo "Test commit: $TEST_SHA"
+
+      - name: Validate specification-commit
+        env:
+          REF: ${{ steps.ref.outputs.ref }}
+          SPEC_SHA: ${{ steps.commits.outputs.spec_sha }}
+        run: |
+          ERRORS=""
+
+          MSG=$(git log -1 --format=%s "$SPEC_SHA")
+          echo "Specification commit message: $MSG"
+
+          if ! printf '%s' "$MSG" | grep -Eq "^$REF"; then
+            ERRORS="${ERRORS}The specification commit must start with \`{ref}\`, e.g. MAG-30"$'\n'
+          fi
+
+          DESC=$(printf '%s' "$MSG" | sed -E "s/^$REF[[:space:]:]*//")
+          if [ -z "$DESC" ]; then
+            ERRORS="${ERRORS}The specification commit must describe the change"$'\n'
+          fi
+
+          CHANGED=$(git diff-tree --no-commit-id --name-only -r "$SPEC_SHA")
+          echo "Changed files:"; echo "$CHANGED"
+
+          BAD=$(printf '%s\n' "$CHANGED" | grep -v "^docs/tasks/task-$REF/" || true)
+          if [ -n "$BAD" ]; then
+            ERRORS="${ERRORS}The specification commit may only change /docs/tasks/task-{ref}"$'\n'
+          fi
+
+          if [ ! -f "docs/tasks/task-$REF/task-$REF.md" ]; then
+            ERRORS="${ERRORS}The specification commit must include define the task"$'\n'
+          fi
+
+          if [ ! -f "docs/tasks/task-$REF/task-$REF-spec.md" ]; then
+            ERRORS="${ERRORS}The specification commit must include the task spec"$'\n'
+          fi
+
+          if [ -n "$ERRORS" ]; then
+            printf '%s' "$ERRORS" > .build-gate-error
+            printf '%s' "$ERRORS" | while IFS= read -r line; do echo "::error::$line"; done
+            exit 1
+          fi
+
+          echo "✅ Specification commit valid"
+
+      - name: Validate test-commit (structure)
+        id: test_commit
+        env:
+          REF: ${{ steps.ref.outputs.ref }}
+          SPEC_SHA: ${{ steps.commits.outputs.spec_sha }}
+          TEST_SHA: ${{ steps.commits.outputs.test_sha }}
+        run: |
+          ERRORS=""
+
+          MSG=$(git log -1 --format=%s "$TEST_SHA")
+          echo "Test commit message: $MSG"
+
+          if ! printf '%s' "$MSG" | grep -Eq "^$REF"; then
+            ERRORS="${ERRORS}The test commit must start with \`{ref}\`, e.g. MAG-30"$'\n'
+          fi
+
+          DESC=$(printf '%s' "$MSG" | sed -E "s/^$REF[[:space:]:]*//")
+          if [ -z "$DESC" ]; then
+            ERRORS="${ERRORS}The test commit must describe the change"$'\n'
+          fi
+
+          CHANGED=$(git diff-tree --no-commit-id --name-only -r "$TEST_SHA")
+          echo "Changed files:"; echo "$CHANGED"
+
+          BAD=$(printf '%s\n' "$CHANGED" | grep -v "^test/" || true)
+          if [ -n "$BAD" ]; then
+            ERRORS="${ERRORS}The test commit may only change /test"$'\n'
+          fi
+
+          ADDED=$(git diff --diff-filter=A --name-only "$SPEC_SHA" "$TEST_SHA" -- test)
+          MODIFIED=$(git diff --diff-filter=M --name-only "$SPEC_SHA" "$TEST_SHA" -- test)
+          DELETED=$(git diff --diff-filter=D --name-only "$SPEC_SHA" "$TEST_SHA" -- test)
+
+          if [ -n "$MODIFIED" ]; then
+            ERRORS="${ERRORS}The test commit may not change existing tests"$'\n'
+          fi
+
+          if [ -n "$DELETED" ]; then
+            ERRORS="${ERRORS}The test commit may not change existing tests"$'\n'
+          fi
+
+          if [ -z "$ADDED" ]; then
+            ERRORS="${ERRORS}The test commit must define a new failing test"$'\n'
+          fi
+
+          if [ -n "$ERRORS" ]; then
+            printf '%s' "$ERRORS" > .build-gate-error
+            printf '%s' "$ERRORS" | while IFS= read -r line; do echo "::error::$line"; done
+            exit 1
+          fi
+
+          echo "Added test files:"; echo "$ADDED"
+          {
+            echo "new_test_files<<EOF"
+            echo "$ADDED"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "✅ Test commit structurally valid"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Existing tests must still pass
+        env:
+          SPEC_SHA: ${{ steps.commits.outputs.spec_sha }}
+        run: |
+          EXISTING=$(git ls-tree -r --name-only "$SPEC_SHA" -- test)
+          if [ -z "$EXISTING" ]; then
+            echo "No pre-existing tests; skipping."
+          else
+            pnpm test -- $EXISTING
+          fi
+
+      - name: At least 1 new test must fail (no implementation yet)
+        env:
+          NEW_TESTS: ${{ steps.test_commit.outputs.new_test_files }}
+        run: |
+          set +e
+          pnpm test -- $NEW_TESTS
+          RESULT=$?
+          set -e
+          if [ "$RESULT" -eq 0 ]; then
+            echo "The test commit must define a new failing test" > .build-gate-error
+            echo "::error::New test(s) passed with no implementation present"
+            exit 1
+          fi
+          echo "✅ New test(s) fail as expected"
+
+      - name: BuildGate failure
+        if: failure()
+        run: |
+          gh api "/repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }}" \
+            -f state=failure -f context=BuildGate \
+            -f description="BuildGate validation failed"
+          if [ -f .build-gate-error ]; then
+            gh api "/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+              -f body="$(cat .build-gate-error)"
+          fi
+
+      - name: All BuildGate validations pass
+        if: success()
+        run: |
+          gh api "/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            -f body="All BuildGate validations pass"
+          gh api "/repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }}" \
+            -f state=success -f context=BuildGate \
+            -f description="All BuildGate validations pass"
+          echo "✅ All BuildGate validations pass"
