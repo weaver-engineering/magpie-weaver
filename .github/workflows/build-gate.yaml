@@ -135,7 +135,8 @@ jobs:
             ERRORS="${ERRORS}The specification commit must include define the task"$'\n'
           fi
 
-          if [ ! -f "docs/tasks/task-$REF/task-$REF-spec.md" ]; then
+          SPEC_FILES=$(git ls-tree --name-only "$SPEC_SHA" "docs/tasks/task-$REF/" 2>/dev/null | grep -cE "task-$REF(-[0-9]+)?(-[a-z]+)?-spec\.md$" || true)
+          if [ "$SPEC_FILES" -eq 0 ]; then
             ERRORS="${ERRORS}The specification commit must include the task spec"$'\n'
           fi
 
