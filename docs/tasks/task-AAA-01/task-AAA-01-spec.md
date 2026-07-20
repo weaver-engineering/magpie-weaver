@@ -12,7 +12,7 @@ Not applicable. This spec defines the requirements for the GitHub workflow actio
 
 ## 2. Deliverable
 This spec delivers the BuildGate GitHub workflow action.
-`.github/workflow/actions/build-gate.yaml`
+`.github/workflows/build-gate.yaml`
 The action validates PRs sent to GitHub for all branches starting with `build`
 It raises a GitHub workflow Status so that a branch protection rule can validate changes to the `build`branch.
 
