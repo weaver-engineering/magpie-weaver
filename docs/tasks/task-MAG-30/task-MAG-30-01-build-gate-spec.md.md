@@ -16,8 +16,16 @@ This spec delivers the BuildGate GitHub workflow action.
 The action validates PRs sent to GitHub for all branches starting with `build`
 It raises a GitHub workflow Status so that a branch protection rule can validate changes to the `build`branch.
 
+### 2.1 Deliverable Notes For Agent
+Implement the solution using multiple stpes in the action using build-gate.md as an guide.
+Include a single success step to raise the success commit status
+Include a single failure step to raise the failure commit status 
+Each step should test all the validations in the step and only exit with failure at the end of the step
+
 ## 3. Required Behaviours
 * A valid task ref `{ref}` matches regex `[A-Z]+-[0-9]+`
+* All references to `{ref}` in this spec refer to text matching the above regex.
+* The `{ref}` must be constant throughout the commits in the PR.
 * Commit status context is `BuildGate`
 
 ### 3.1 The BuildGate blocks PRs that don't start with {ref}
