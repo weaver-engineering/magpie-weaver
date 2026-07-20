@@ -62,12 +62,12 @@ jobs:
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
           echo "Derived ref: $REF"
 
-      - name: Validate PR title starts with {ref}
+      - name: Validate PR title contains {ref}
         env:
           REF: ${{ steps.ref.outputs.ref }}
           TITLE: ${{ github.event.pull_request.title }}
         run: |
-          if ! printf '%s' "$TITLE" | grep -Eq "^$REF"; then
+          if ! printf '%s' "$TITLE" | grep -Eq "$REF"; then
             echo "The title of the PR must start with \`{ref}\`, e.g. 'MAG-30'" > .build-gate-error
             echo "::error::PR title \"$TITLE\" does not start with ref \"$REF\""
             exit 1
