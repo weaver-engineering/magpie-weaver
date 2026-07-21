@@ -1,0 +1,22 @@
+{
+  "name": "@magpieweaver/mobile",
+  "description": "The Magpie Weaver mobile package",
+  "private": true,
+  "version": "0.1.0",
+  "_comment_type": "Internally CommonJS (no 'type': 'module') - Metro/React Native's ESM support is inconsistent; do not 'fix' this to match the rest of the monorepo without confirming Metro version support first,",
+  "scripts": {
+    "start": "react-native start",
+    "android": "react-native run-android",
+    "ios": "react-nbative run-ios",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "react": "^19.2.7",
+    "react-native": "^0.86.0"
+  },
+  "devDependencies": {
+    "@react-native/typescript-config": "^0.86.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

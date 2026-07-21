@@ -1,0 +1,23 @@
+{
+  "name": "magpie-weaver",
+  "description": "The Magpie Weaver root package",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.15.1",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "11.15.1",
+      "onFail": "download"
+    }
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "gate-check": "gate-check"
+  },
+  "devDependencies": {
+    "@magpieweaver/gate-checks": "workspace:*",
+    "typescript": "^7.0.2"
+  }
+}
