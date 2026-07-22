@@ -1,6 +1,6 @@
-import { type GateCheckResult, type GateCheckFn } from '../types.js';
+import { type GateCheckResult, type GateCheckFn } from "../types.js";
 
-export const requiredArgs: [string, ...string[]] = ['pr-base-sha', 'pr-head-sha'];
+export const requiredArgs: [string, ...string[]] = ["pr-base-sha", "pr-head-sha"];
 
 export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult> => {
   const violations: string[] = [];
@@ -10,12 +10,12 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
     await inspectors.coverage.getCoverage();
   } catch {
     return {
-      check: 'new-tests-fail',
+      check: "new-tests-fail",
       args,
       passed: false,
       messages,
-      violations: ['Coverage must be run first'],
-      summary: 'Coverage not run',
+      violations: ["Coverage must be run first"],
+      summary: "Coverage not run",
       values: { numTests: 0, numTestFailures: 0, newTests: [], newTestFailures: [] },
     };
   }
@@ -29,23 +29,23 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
 
   if (!testsFailed) {
     return {
-      check: 'new-tests-fail',
+      check: "new-tests-fail",
       args,
       passed: false,
-      messages: ['All tests passed'],
-      violations: ['Tests were expected to fail but all passed'],
-      summary: 'No test failures detected',
+      messages: ["All tests passed"],
+      violations: ["Tests were expected to fail but all passed"],
+      summary: "No test failures detected",
       values: { numTests: 0, numTestFailures: 0, newTests: [], newTestFailures: [] },
     };
   }
 
   return {
-    check: 'new-tests-fail',
+    check: "new-tests-fail",
     args,
     passed: true,
-    messages: ['At least one new test fails'],
+    messages: ["At least one new test fails"],
     violations,
-    summary: 'New test failures detected',
+    summary: "New test failures detected",
     values: { numTests: 0, numTestFailures: 0, newTests: [], newTestFailures: [] },
   };
 };

@@ -21,9 +21,9 @@ export interface ParsedCommitMessage {
 }
 
 export function parseCommitMessage(message: string): ParsedCommitMessage {
-  const lines = message.split('\n');
-  const title = lines[0]?.trim() ?? '';
-  const body = lines.slice(1).filter((l) => l.trim()).join('\n').trim();
+  const lines = message.split("\n");
+  const title = lines[0]?.trim() ?? "";
+  const body = lines.slice(1).filter((l) => l.trim()).join("\n").trim();
   return { title, body, ref: parseRefFromTitle(title) };
 }
 

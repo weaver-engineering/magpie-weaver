@@ -1,8 +1,8 @@
-import { exec, execSync } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
-import { promisify } from 'node:util';
-import { type CoverageInspector } from './coverage-interface.js';
+import { exec, execSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { promisify } from "node:util";
+import { type CoverageInspector } from "./coverage-interface.js";
 
 const execAsync = promisify(exec);
 
@@ -22,8 +22,8 @@ export class CoverageInspectorImpl implements CoverageInspector {
    */
   constructor(options?: { cwd?: string; coverageDir?: string; gitBaseRef?: string }) {
     this.cwd = options?.cwd ?? process.cwd();
-    this.coverageDir = resolve(this.cwd, options?.coverageDir ?? 'coverage');
-    this.gitBaseRef = options?.gitBaseRef ?? 'origin/main';
+    this.coverageDir = resolve(this.cwd, options?.coverageDir ?? "coverage");
+    this.gitBaseRef = options?.gitBaseRef ?? "origin/main";
   }
 
   /**
@@ -34,17 +34,17 @@ export class CoverageInspectorImpl implements CoverageInspector {
    * @param path If given, only run tests at the given path
    */
   runTestsWithCoverage(path?: string): void {
-    const filterFlag = path ? ` --filter ${path}` : '';
+    const filterFlag = path ? ` --filter ${path}` : "";
     const command = [
-      'pnpm',
+      "pnpm",
       `test${filterFlag}`,
-      '--',
-      '--coverage',
-      '--coverage.reporter=json-summary',
-      '--coverage.reporter=lcov',
-    ].join('');
+      "--",
+      "--coverage",
+      "--coverage.reporter=json-summary",
+      "--coverage.reporter=lcov",
+    ].join("");
 
-    execSync(command, { cwd: this.cwd, stdio: 'inherit' });
+    execSync(command, { cwd: this.cwd, stdio: "inherit" });
   }
 
   /**
@@ -81,10 +81,10 @@ export class CoverageInspectorImpl implements CoverageInspector {
    * @throws If LCOV file has not been generated yet
    */
   async getNewLineCoverage(path?: string): Promise<number> {
-    const lcovPath = resolve(this.coverageDir, 'lcov.info');
+    const lcovPath = resolve(this.coverageDir, "lcov.info");
     let lcovContent: string;
     try {
-      lcovContent = await readFile(lcovPath, 'utf-8');
+      lcovContent = await readFile(lcovPath, "utf-8");
     } catch {
       throw new Error(
         `LCOV file not found at ${lcovPath}. Run runTestsWithCoverage() first.`,
@@ -115,10 +115,10 @@ export class CoverageInspectorImpl implements CoverageInspector {
   }
 
   private async readCoverageSummary(): Promise<Record<string, { lines: { total: number; covered: number; pct: number } }>> {
-    const summaryPath = resolve(this.coverageDir, 'coverage-summary.json');
+    const summaryPath = resolve(this.coverageDir, "coverage-summary.json");
     let content: string;
     try {
-      content = await readFile(summaryPath, 'utf-8');
+      content = await readFile(summaryPath, "utf-8");
     } catch {
       throw new Error(
         `Coverage summary not found at ${summaryPath}. Run runTestsWithCoverage() first.`,
@@ -145,15 +145,15 @@ export class CoverageInspectorImpl implements CoverageInspector {
     lcovContent: string,
   ): Record<string, Set<number>> {
     const files: Record<string, Set<number>> = {};
-    let currentFile = '';
+    let currentFile = "";
 
-    for (const line of lcovContent.split('\n')) {
-      if (line.startsWith('SF:')) {
+    for (const line of lcovContent.split("\n")) {
+      if (line.startsWith("SF:")) {
         currentFile = line.slice(3);
         files[currentFile] = new Set();
-      } else if (line.startsWith('DA:')) {
-        const [, data] = line.split(':');
-        const [lineNum, hitCount] = data.split(',');
+      } else if (line.startsWith("DA:")) {
+        const [, data] = line.split(":");
+        const [lineNum, hitCount] = data.split(",");
         if (currentFile && parseInt(hitCount) > 0) {
           files[currentFile].add(parseInt(lineNum));
         }
@@ -177,31 +177,32 @@ export class CoverageInspectorImpl implements CoverageInspector {
       diffOutput = stdout;
     } catch {
       const { stdout } = await execAsync(
-        'git diff HEAD~1 --unified=0 --diff-filter=AM',
+        "git diff HEAD~1 --unified=0 --diff-filter=AM",
         { cwd: this.cwd },
       );
       diffOutput = stdout;
     }
 
-    let currentFile = '';
+    let currentFile = "";
     let currentNewLine = 0;
 
-    for (const line of diffOutput.split('\n')) {
-      if (line.startsWith('+++ b/')) {
+    for (const line of diffOutput.split("\n")) {
+      if (line.startsWith("+++ b/")) {
         currentFile = line.slice(6);
         if (!pathFilter || currentFile.startsWith(pathFilter) || currentFile.includes(pathFilter)) {
           files[currentFile] = new Set();
         } else {
-          currentFile = '';
+          currentFile = "";
         }
-      } else if (line.startsWith('@@')) {
+      } else if (line.startsWith("@@")) {
         const match = line.match(/\+(\d+)/);
         currentNewLine = match ? parseInt(match[1]) : 0;
-      } else if (line.startsWith('+') && !line.startsWith('+++') && currentFile && currentNewLine > 0) {
+      } else if (line.startsWith("+") && !line.startsWith("+++") && currentFile && currentNewLine > 0) {
         files[currentFile].add(currentNewLine);
         currentNewLine++;
-      } else if (line.startsWith('-') && !line.startsWith('---')) {
-      } else if (line.startsWith(' ') && currentNewLine > 0) {
+      } else if (line.startsWith("-") && !line.startsWith("---")) {
+        // removed lines are not tracked
+      } else if (line.startsWith(" ") && currentNewLine > 0) {
         currentNewLine++;
       }
     }

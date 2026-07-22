@@ -1,11 +1,11 @@
-import { type GateCheckResult, type GateCheckFn } from '../types.js';
+import { type GateCheckResult, type GateCheckFn } from "../types.js";
 
-export const requiredArgs: [string, ...string[]] = ['expect-failure'];
+export const requiredArgs: [string, ...string[]] = ["expect-failure"];
 
 export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult> => {
   const violations: string[] = [];
   const messages: string[] = [];
-  const expectFailure = args['expect-failure'] === true || args['expect-failure'] === 'true';
+  const expectFailure = args["expect-failure"] === true || args["expect-failure"] === "true";
 
   let coverageExists = false;
   try {
@@ -17,12 +17,12 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
 
   if (!coverageExists) {
     return {
-      check: 'coverage',
+      check: "coverage",
       args,
       passed: false,
       messages,
-      violations: ['Coverage must be run first'],
-      summary: 'Coverage not run',
+      violations: ["Coverage must be run first"],
+      summary: "Coverage not run",
       values: { lineCoverage: 0, newLineCoverage: 0 },
     };
   }
@@ -37,23 +37,23 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
 
     if (!testsFailed) {
       return {
-        check: 'coverage',
+        check: "coverage",
         args,
         passed: false,
         messages,
-        violations: ['Tests were expected to fail but all passed'],
-        summary: 'Expected failure but tests passed',
+        violations: ["Tests were expected to fail but all passed"],
+        summary: "Expected failure but tests passed",
         values: { lineCoverage: 0, newLineCoverage: 0 },
       };
     }
 
     return {
-      check: 'coverage',
+      check: "coverage",
       args,
       passed: true,
-      messages: ['Tests failed as expected'],
+      messages: ["Tests failed as expected"],
       violations,
-      summary: 'Expected test failures confirmed',
+      summary: "Expected test failures confirmed",
       values: { lineCoverage: 0, newLineCoverage: 0 },
     };
   }
@@ -66,13 +66,13 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
   try {
     lineCoverage = await inspectors.coverage.getCoverage();
   } catch {
-    violations.push('Could not read coverage data');
+    violations.push("Could not read coverage data");
   }
 
   try {
     newLineCoverage = await inspectors.coverage.getNewLineCoverage();
   } catch {
-    violations.push('Could not read new line coverage data');
+    violations.push("Could not read new line coverage data");
   }
 
   if (newLineCoverage <= 90) {
@@ -84,14 +84,14 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
   }
 
   return {
-    check: 'coverage',
+    check: "coverage",
     args,
     passed: violations.length === 0,
     messages,
     violations,
     summary: violations.length === 0
       ? `Coverage thresholds met: ${lineCoverage}% line, ${newLineCoverage}% new line`
-      : violations.join('; '),
+      : violations.join("; "),
     values: { lineCoverage, newLineCoverage },
   };
 };

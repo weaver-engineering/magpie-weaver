@@ -14,11 +14,16 @@
   "scripts": {
     "build": "pnpm -r build",
     "test": "pnpm -r test",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "gate-check": "gate-checks"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@magpieweaver/gate-checks": "workspace:*",
-    "typescript": "^7.0.2",
+    "eslint": "^10.7.0",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.65.0",
     "vitest": "4.1.10"
   }
 }

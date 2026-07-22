@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-import { catalog } from './checks/index.js';
-import { CoverageInspectorImpl } from './coverage-inspector.js';
-import { GitInspectorImpl } from './git-inspector.js';
-import type { GateCheckResult } from './types.js';
+import { catalog } from "./checks/index.js";
+import { CoverageInspectorImpl } from "./coverage-inspector.js";
+import { GitInspectorImpl } from "./git-inspector.js";
+import type { GateCheckResult } from "./types.js";
 
 function parseArgs(
   argv: string[],
@@ -13,28 +13,28 @@ function parseArgs(
   args: Record<string, boolean | number | string | string[]>;
 } {
   const args = argv.slice(2);
-  let checkName = '';
+  let checkName = "";
   const parsed: Record<string, boolean | number | string | string[]> = {};
   let json = false;
   let i = 0;
 
-  if (args.length > 0 && !args[0].startsWith('--')) {
+  if (args.length > 0 && !args[0].startsWith("--")) {
     checkName = args[0];
     i = 1;
   }
 
   while (i < args.length) {
     const arg = args[i];
-    if (arg === '--json') {
+    if (arg === "--json") {
       json = true;
       i++;
       continue;
     }
-    if (arg.startsWith('--')) {
+    if (arg.startsWith("--")) {
       const key = arg.slice(2);
       i++;
       const values: string[] = [];
-      while (i < args.length && !args[i].startsWith('--') && args[i] !== '--json') {
+      while (i < args.length && !args[i].startsWith("--") && args[i] !== "--json") {
         values.push(args[i]);
         i++;
       }
@@ -59,7 +59,7 @@ function writeJson(result: GateCheckResult): void {
 }
 
 function writeHuman(result: GateCheckResult): void {
-  const status = result.passed ? 'PASS' : 'FAIL';
+  const status = result.passed ? "PASS" : "FAIL";
   console.log(`[gate-check] ${result.check}: ${status}`);
   for (const msg of result.messages) {
     console.log(`  [info] ${msg}`);
@@ -72,12 +72,12 @@ function writeHuman(result: GateCheckResult): void {
 
 function exitInvalid(checkName: string, message: string, json: boolean): never {
   const result: GateCheckResult = {
-    check: checkName || 'unknown',
+    check: checkName || "unknown",
     args: {},
     passed: false,
     messages: [],
     violations: [message],
-    summary: 'Invalid arguments',
+    summary: "Invalid arguments",
     values: {},
   };
   if (json) {
@@ -92,7 +92,7 @@ async function main(): Promise<void> {
   const { checkName, json, args } = parseArgs(process.argv);
 
   if (!checkName) {
-    exitInvalid(checkName, 'No check name provided', json);
+    exitInvalid(checkName, "No check name provided", json);
   }
 
   const def = catalog[checkName];
@@ -130,6 +130,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((e) => {
-  console.error('Fatal error:', e);
+  console.error("Fatal error:", e);
   process.exit(2);
 });

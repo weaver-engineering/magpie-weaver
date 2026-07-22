@@ -1,5 +1,5 @@
-import { simpleGit } from 'simple-git';
-import { type GitInspector } from './git-interface.js';
+import { simpleGit } from "simple-git";
+import { type GitInspector } from "./git-interface.js";
 
 /**
  * Implementation of GitInspector using simple-git to interact with the
@@ -23,7 +23,7 @@ export class GitInspectorImpl implements GitInspector {
    * @returns The commit reference where the changes to aRef diverge from the changes to bRef
    */
   async mergeBase(aRef: string, bRef: string): Promise<string> {
-    return (await this.git.raw(['merge-base', aRef, bRef])).trim();
+    return (await this.git.raw(["merge-base", aRef, bRef])).trim();
   }
 
   /**
@@ -38,16 +38,16 @@ export class GitInspectorImpl implements GitInspector {
     let output: string;
     if (headRef) {
       output = await this.git.raw([
-        'diff',
-        '--name-only',
+        "diff",
+        "--name-only",
         `${baseRef}..${headRef}`,
       ]);
     } else {
       output = await this.git.raw([
-        'diff-tree',
-        '--no-commit-id',
-        '--name-only',
-        '-r',
+        "diff-tree",
+        "--no-commit-id",
+        "--name-only",
+        "-r",
         baseRef,
       ]);
     }
@@ -63,7 +63,7 @@ export class GitInspectorImpl implements GitInspector {
    * @returns A list of the paths in the repository to the given reference
    */
   async lsTree(commitRef: string, path?: string): Promise<string[]> {
-    const args = ['ls-tree', '--name-only', '-r', commitRef];
+    const args = ["ls-tree", "--name-only", "-r", commitRef];
     if (path) args.push(path);
     const output = await this.git.raw(args);
     return this.splitLines(output);
@@ -81,12 +81,12 @@ export class GitInspectorImpl implements GitInspector {
     let output: string;
     if (headRef) {
       output = await this.git.raw([
-        'log',
-        '--format=%B',
+        "log",
+        "--format=%B",
         `${baseRef}..${headRef}`,
       ]);
     } else {
-      output = await this.git.raw(['log', '--format=%B', '-1', baseRef]);
+      output = await this.git.raw(["log", "--format=%B", "-1", baseRef]);
     }
     return this.splitByCommit(output);
   }
@@ -106,7 +106,7 @@ export class GitInspectorImpl implements GitInspector {
     path?: string,
     headRef?: string,
   ): Promise<string[]> {
-    return this.diffFilter('A', baseRef, path, headRef);
+    return this.diffFilter("A", baseRef, path, headRef);
   }
 
   /**
@@ -124,7 +124,7 @@ export class GitInspectorImpl implements GitInspector {
     path?: string,
     headRef?: string,
   ): Promise<string[]> {
-    return this.diffFilter('M', baseRef, path, headRef);
+    return this.diffFilter("M", baseRef, path, headRef);
   }
 
   /**
@@ -142,7 +142,7 @@ export class GitInspectorImpl implements GitInspector {
     path?: string,
     headRef?: string,
   ): Promise<string[]> {
-    return this.diffFilter('D', baseRef, path, headRef);
+    return this.diffFilter("D", baseRef, path, headRef);
   }
 
   /**
@@ -154,7 +154,7 @@ export class GitInspectorImpl implements GitInspector {
    */
   async revList(baseRef: string, headRef: string): Promise<string[]> {
     const output = await this.git.raw([
-      'rev-list',
+      "rev-list",
       `${baseRef}..${headRef}`,
     ]);
     return this.splitLines(output);
@@ -179,8 +179,8 @@ export class GitInspectorImpl implements GitInspector {
       ? `${baseRef}..${headRef}`
       : `${baseRef}^..${baseRef}`;
 
-    const args = ['diff', '--name-only', `--diff-filter=${filter}`, range];
-    if (path) args.push('--', path);
+    const args = ["diff", "--name-only", `--diff-filter=${filter}`, range];
+    if (path) args.push("--", path);
 
     const output = await this.git.raw(args);
     return this.splitLines(output);
@@ -190,7 +190,7 @@ export class GitInspectorImpl implements GitInspector {
    * Split raw git output into non-empty lines.
    */
   private splitLines(output: string): string[] {
-    return (output || '').split('\n').filter(Boolean);
+    return (output || "").split("\n").filter(Boolean);
   }
 
   /**
@@ -199,7 +199,7 @@ export class GitInspectorImpl implements GitInspector {
    * potentially spanning multiple lines. An empty line separates commits.
    */
   private splitByCommit(output: string): string[] {
-    return (output || '')
+    return (output || "")
       .split(/\n\n+/)
       .map((m) => m.trim())
       .filter(Boolean);
