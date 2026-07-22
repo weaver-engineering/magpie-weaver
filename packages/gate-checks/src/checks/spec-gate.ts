@@ -23,6 +23,7 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
   }
   const ref = branchResult.values.ref as string;
   messages.push(...branchResult.messages);
+  messages.push("Branch validated via branch-ref");
 
   let mergeBase: string;
   try {
@@ -30,6 +31,7 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
   } catch {
     throw new Error(`Invalid argument: --destination-branch="${destinationBranch}" could not be resolved`);
   }
+  messages.push(`Merge base with "${destinationBranch}": ${mergeBase}`);
 
   let commits: string[];
   try {
@@ -52,6 +54,7 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
       values: { mergeBase, commits },
     };
   }
+  messages.push(`1 commit between HEAD and ${destinationBranch}`);
 
   let destCommits: string[];
   try {
@@ -72,6 +75,7 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
       values: { mergeBase, commits },
     };
   }
+  messages.push(`Destination branch "${destinationBranch}" has not advanced`);
 
   const specResult = await validateSpecCommit(inspectors, {
     "spec-commit-ref": commits[0],

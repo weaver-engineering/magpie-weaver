@@ -67,6 +67,14 @@ function writeHuman(result: GateCheckResult): void {
   for (const v of result.violations) {
     console.log(`  [violation] ${v}`);
   }
+  const valueKeys = Object.keys(result.values);
+  if (valueKeys.length > 0) {
+    for (const key of valueKeys) {
+      const val = result.values[key];
+      const display = Array.isArray(val) ? val.join(", ") : String(val);
+      console.log(`  [export] ${key}: ${display}`);
+    }
+  }
   console.log(`  summary: ${result.summary}`);
 }
 

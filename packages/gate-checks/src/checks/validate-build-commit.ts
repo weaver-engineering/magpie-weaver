@@ -55,14 +55,20 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
 
   const ref = parsed.ref!;
 
+  messages.push(`Ref "${ref}" found in commit message`);
+
   if (!commitTitleStartsWithRef(parsed.title, ref)) {
     violations.push(`Commit message title must start with "${ref}"`);
   } else if (!commitTitleContinuesBeyondRef(parsed.title, ref)) {
     violations.push("Commit message title must continue beyond the ref");
+  } else {
+    messages.push(`Commit message title valid: "${parsed.title}"`);
   }
 
   if (!parsed.body) {
     violations.push("Commit message body must not be empty");
+  } else {
+    messages.push("Commit message body present");
   }
 
   const changedFiles = await inspectors.git.diffTree(commitRef);
@@ -70,11 +76,15 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
 
   if (outsideFiles.length > 0) {
     violations.push(`Changes outside allowed paths: ${outsideFiles.join(", ")}`);
+  } else {
+    messages.push("Changes within allowed paths (apps/, packages/, package.json, pnpm-lock.yaml)");
   }
 
   const newFiles = await inspectors.git.added(commitRef);
   const modifiedFiles = await inspectors.git.modified(commitRef);
   const deletedFiles = await inspectors.git.deleted(commitRef);
+
+  messages.push(`${newFiles.length} file(s) added, ${modifiedFiles.length} modified, ${deletedFiles.length} deleted`);
 
   return {
     check: "validate-build-commit",

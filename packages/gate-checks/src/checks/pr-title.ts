@@ -22,9 +22,12 @@ export const fn: GateCheckFn = async (_inspectors, args): Promise<GateCheckResul
       values: {},
     };
   }
+  messages.push(`Ref "${ref}" is valid`);
 
   if (!prTitle.includes(ref)) {
     violations.push(`PR title "${prTitle}" does not contain ref "${ref}"`);
+  } else {
+    messages.push(`PR title "${prTitle}" contains ref "${ref}"`);
   }
 
   return {

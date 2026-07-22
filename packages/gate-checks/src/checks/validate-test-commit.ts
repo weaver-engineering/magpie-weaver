@@ -55,14 +55,20 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
 
   const ref = parsed.ref!;
 
+  messages.push(`Ref "${ref}" found in commit message`);
+
   if (!commitTitleStartsWithRef(parsed.title, ref)) {
     violations.push(`Commit message title must start with "${ref}"`);
   } else if (!commitTitleContinuesBeyondRef(parsed.title, ref)) {
     violations.push("Commit message title must continue beyond the ref");
+  } else {
+    messages.push(`Commit message title valid: "${parsed.title}"`);
   }
 
   if (!parsed.body) {
     violations.push("Commit message body must not be empty");
+  } else {
+    messages.push("Commit message body present");
   }
 
   const changedFiles = await inspectors.git.diffTree(commitRef);
@@ -70,6 +76,8 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
 
   if (outsideFiles.length > 0) {
     violations.push(`Changes outside allowed paths: ${outsideFiles.join(", ")}`);
+  } else {
+    messages.push("Changes within allowed paths (test/, package.json, pnpm-lock.yaml)");
   }
 
   const newFiles = await inspectors.git.added(commitRef);
@@ -80,10 +88,14 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
 
   if (existingTests.length > 0) {
     violations.push(`Existing tests must not be changed: ${existingTests.join(", ")}`);
+  } else {
+    messages.push("No existing tests modified");
   }
 
   if (newTests.length === 0) {
     violations.push("At least one new test must be defined in test/");
+  } else {
+    messages.push(`${newTests.length} new test(s): ${newTests.join(", ")}`);
   }
 
   return {

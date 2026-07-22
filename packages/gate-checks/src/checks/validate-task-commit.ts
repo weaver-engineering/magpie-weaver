@@ -49,24 +49,34 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
 
   const ref = parsed.ref!;
 
+  messages.push(`Ref "${ref}" found in commit message`);
+
   if (!commitTitleStartsWithRef(parsed.title, ref)) {
     violations.push(`Commit message title must start with "${ref}"`);
   } else if (!commitTitleContinuesBeyondRef(parsed.title, ref)) {
     violations.push("Commit message title must continue beyond the ref");
+  } else {
+    messages.push(`Commit message title valid: "${parsed.title}"`);
   }
 
   if (!parsed.body) {
     violations.push("Commit message body must not be empty");
+  } else {
+    messages.push("Commit message body present");
   }
 
   const modifiedFiles = await inspectors.git.modified(commitRef);
   const newFiles = await inspectors.git.added(commitRef);
   const deletedFiles = await inspectors.git.deleted(commitRef);
 
+  messages.push(`${newFiles.length} file(s) added, ${modifiedFiles.length} modified, ${deletedFiles.length} deleted`);
+
   const testFiles = /^test\//;
   const newTests = newFiles.filter((f) => testFiles.test(f));
   const modifiedTests = modifiedFiles.filter((f) => testFiles.test(f));
   const deletedTests = deletedFiles.filter((f) => testFiles.test(f));
+
+  messages.push(`${newTests.length} new test(s), ${modifiedTests.length} modified, ${deletedTests.length} deleted`);
 
   return {
     check: "validate-task-commit",

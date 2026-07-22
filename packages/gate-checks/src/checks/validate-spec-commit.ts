@@ -49,14 +49,20 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
 
   const ref = parsed.ref!;
 
+  messages.push(`Ref "${ref}" found in commit message`);
+
   if (!commitTitleStartsWithRef(parsed.title, ref)) {
     violations.push(`Commit message title must start with "${ref}"`);
   } else if (!commitTitleContinuesBeyondRef(parsed.title, ref)) {
     violations.push("Commit message title must continue beyond the ref");
+  } else {
+    messages.push(`Commit message title valid: "${parsed.title}"`);
   }
 
   if (!parsed.body) {
     violations.push("Commit message body must not be empty");
+  } else {
+    messages.push("Commit message body present");
   }
 
   const taskDir = `docs/tasks/task-${ref}`;
@@ -72,11 +78,15 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
 
   if (taskFiles.length === 0) {
     violations.push(`Task directory "${taskDir}" does not exist`);
+  } else {
+    messages.push(`Task directory "${taskDir}" found with ${taskFiles.length} files`);
   }
 
   const taskFileExists = taskFiles.includes(taskFile);
   if (!taskFileExists) {
     violations.push(`Task file "${taskFile}" does not exist`);
+  } else {
+    messages.push(`Task file "${taskFile}" present`);
   }
 
   const specFiles = taskFiles.filter((f) => {
@@ -86,6 +96,8 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
 
   if (specFiles.length === 0) {
     violations.push("No specification files found");
+  } else {
+    messages.push(`${specFiles.length} specification file(s) found: ${specFiles.join(", ")}`);
   }
 
   const changedFiles = await inspectors.git.diffTree(commitRef);
@@ -93,6 +105,8 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
 
   if (changesOutside.length > 0) {
     violations.push(`Changes outside task directory: ${changesOutside.join(", ")}`);
+  } else {
+    messages.push("No changes outside task directory");
   }
 
   return {

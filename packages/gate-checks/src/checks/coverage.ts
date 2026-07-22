@@ -26,6 +26,7 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
       values: { lineCoverage: 0, newLineCoverage: 0 },
     };
   }
+  messages.push("Coverage data loaded");
 
   if (expectFailure) {
     let testsFailed = false;
@@ -47,11 +48,12 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
       };
     }
 
+    messages.push("Tests failed as expected");
     return {
       check: "coverage",
       args,
       passed: true,
-      messages: ["Tests failed as expected"],
+      messages,
       violations,
       summary: "Expected test failures confirmed",
       values: { lineCoverage: 0, newLineCoverage: 0 },
@@ -59,18 +61,21 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
   }
 
   inspectors.coverage.runTestsWithCoverage();
+  messages.push("Tests run with coverage");
 
   let lineCoverage = 0;
   let newLineCoverage = 0;
 
   try {
     lineCoverage = await inspectors.coverage.getCoverage();
+    messages.push(`Line coverage: ${lineCoverage}%`);
   } catch {
     violations.push("Could not read coverage data");
   }
 
   try {
     newLineCoverage = await inspectors.coverage.getNewLineCoverage();
+    messages.push(`New line coverage: ${newLineCoverage}%`);
   } catch {
     violations.push("Could not read new line coverage data");
   }
