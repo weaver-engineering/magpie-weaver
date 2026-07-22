@@ -7,14 +7,28 @@ describe('checks/index catalog', () => {
     expect(typeof catalog).toBe('object');
   });
 
-  it('contains get-inbound-commits', () => {
-    expect(catalog['get-inbound-commits']).toBeDefined();
-  });
+  const expectedChecks: Record<string, string[]> = {
+    'pr-and-branch-refs': ['head-ref', 'pr-base-ref'],
+    'pr-title': ['ref', 'pr-title'],
+    'get-inbound-commits': ['pr-base-sha', 'pr-head-sha'],
+    'validate-spec-commit': ['spec-commit-sha'],
+    'validate-test-commit': ['test-commit-sha'],
+    'validate-build-commit': ['build-commit-sha'],
+    'validate-task-commit': ['task-commit-sha'],
+    'existing-tests-pass': ['pr-base-sha', 'pr-head-sha'],
+    'new-tests-fail': ['pr-base-sha', 'pr-head-sha'],
+    'coverage': ['expect-failure'],
+  };
 
-  it('has fn and requiredArgs for get-inbound-commits', () => {
-    const entry = catalog['get-inbound-commits'];
-    expect(typeof entry.fn).toBe('function');
-    expect(Array.isArray(entry.requiredArgs)).toBe(true);
-    expect(entry.requiredArgs).toEqual(['pr-base-sha', 'pr-head-sha']);
+  describe('all 10 checks are registered', () => {
+    for (const [name, args] of Object.entries(expectedChecks)) {
+      it(`has "${name}" with fn and requiredArgs ${JSON.stringify(args)}`, () => {
+        const entry = catalog[name];
+        expect(entry).toBeDefined();
+        expect(typeof entry.fn).toBe('function');
+        expect(Array.isArray(entry.requiredArgs)).toBe(true);
+        expect(entry.requiredArgs).toEqual(args);
+      });
+    }
   });
 });
