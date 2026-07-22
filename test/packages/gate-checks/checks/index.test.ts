@@ -18,9 +18,10 @@ describe("checks/index catalog", () => {
     "existing-tests-pass": ["pr-base-sha", "pr-head-sha"],
     "new-tests-fail": ["pr-base-sha", "pr-head-sha"],
     "coverage": ["expect-failure"],
+    "spec-gate": [],
   };
 
-  describe("all 10 checks are registered", () => {
+  describe("all 11 checks are registered", () => {
     for (const [name, args] of Object.entries(expectedChecks)) {
       it(`has "${name}" with fn and requiredArgs ${JSON.stringify(args)}`, () => {
         const entry = catalog[name];

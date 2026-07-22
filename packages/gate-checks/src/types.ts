@@ -37,7 +37,7 @@ export interface FunctionDef {
   fn: GateCheckFn;
 
   /** The list of required arguments for the function */
-  requiredArgs: [string, ...string[]];
+  requiredArgs: string[];
 }
 
 /**

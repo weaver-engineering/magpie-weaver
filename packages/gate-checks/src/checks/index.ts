@@ -9,6 +9,7 @@ import { fn as validateTaskCommit, requiredArgs as validateTaskCommitArgs } from
 import { fn as existingTestsPass, requiredArgs as existingTestsPassArgs } from "./existing-tests-pass.js";
 import { fn as newTestsFail, requiredArgs as newTestsFailArgs } from "./new-tests-fail.js";
 import { fn as coverage, requiredArgs as coverageArgs } from "./coverage.js";
+import { fn as specGate, requiredArgs as specGateArgs } from "./spec-gate.js";
 
 export const catalog: FunctionCatalog = {
   "pr-and-branch-refs": { fn: prAndBranchRefs, requiredArgs: prAndBranchRefsArgs },
@@ -21,4 +22,5 @@ export const catalog: FunctionCatalog = {
   "existing-tests-pass": { fn: existingTestsPass, requiredArgs: existingTestsPassArgs },
   "new-tests-fail": { fn: newTestsFail, requiredArgs: newTestsFailArgs },
   "coverage": { fn: coverage, requiredArgs: coverageArgs },
+  "spec-gate": { fn: specGate, requiredArgs: specGateArgs },
 };
