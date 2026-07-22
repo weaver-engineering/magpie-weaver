@@ -1,11 +1,11 @@
-import { type GateCheckResult, type GateCheckFn } from '../types.js';
-import { isValidRef, extractRefFromBranch } from './helpers.js';
+import { type GateCheckResult, type GateCheckFn } from "../types.js";
+import { isValidRef, extractRefFromBranch } from "./helpers.js";
 
-export const requiredArgs: [string, ...string[]] = ['head-ref', 'pr-base-ref'];
+export const requiredArgs: [string, ...string[]] = ["head-ref", "pr-base-ref"];
 
 export const fn: GateCheckFn = async (_inspectors, args): Promise<GateCheckResult> => {
-  const headRef = args['head-ref'] as string;
-  const prBaseRef = args['pr-base-ref'] as string;
+  const headRef = args["head-ref"] as string;
+  const prBaseRef = args["pr-base-ref"] as string;
 
   const violations: string[] = [];
   const messages: string[] = [];
@@ -42,14 +42,14 @@ export const fn: GateCheckFn = async (_inspectors, args): Promise<GateCheckResul
     : undefined;
 
   return {
-    check: 'pr-and-branch-refs',
+    check: "pr-and-branch-refs",
     args,
     passed: violations.length === 0,
     messages,
     violations,
     summary: violations.length === 0
       ? `Valid refs: head-ref="${headRef}", pr-base-ref="${prBaseRef}"`
-      : violations.join('; '),
+      : violations.join("; "),
     values: ref ? { ref } : {},
   };
 };
