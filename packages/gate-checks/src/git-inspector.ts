@@ -78,17 +78,19 @@ export class GitInspectorImpl implements GitInspector {
    * @returns The commit messages between baseRef and headRef
    */
   async commitMessages(baseRef: string, headRef?: string): Promise<string[]> {
-    let output: string;
     if (headRef) {
-      output = await this.git.raw([
+      const output = await this.git.raw([
         "log",
-        "--format=%B",
+        "--format=---%n%B",
         `${baseRef}..${headRef}`,
       ]);
-    } else {
-      output = await this.git.raw(["log", "--format=%B", "-1", baseRef]);
+      return output
+        .split("---")
+        .map((m) => m.trim())
+        .filter(Boolean);
     }
-    return this.splitByCommit(output);
+    const output = await this.git.raw(["log", "--format=%B", "-1", baseRef]);
+    return [output.trim()];
   }
 
   /**
@@ -191,17 +193,5 @@ export class GitInspectorImpl implements GitInspector {
    */
   private splitLines(output: string): string[] {
     return (output || "").split("\n").filter(Boolean);
-  }
-
-  /**
-   * Split raw git log output into individual commit messages.
-   * Commit messages are separated by newlines, with each message
-   * potentially spanning multiple lines. An empty line separates commits.
-   */
-  private splitByCommit(output: string): string[] {
-    return (output || "")
-      .split(/\n\n+/)
-      .map((m) => m.trim())
-      .filter(Boolean);
   }
 }
