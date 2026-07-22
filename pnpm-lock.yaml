@@ -213,6 +213,9 @@ importers:
       '@magpieweaver/gate-checks':
         specifier: workspace:*
         version: link:packages/gate-checks
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
       eslint:
         specifier: ^10.7.0
         version: 10.7.0(supports-color@8.1.1)
@@ -255,7 +258,7 @@ importers:
         version: 19.2.7
       react-native:
         specifier: ^0.86.0
-        version: 0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(react@19.2.7)(supports-color@8.1.1)
+        version: 0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.17)(react@19.2.7)(supports-color@8.1.1)
     devDependencies:
       '@react-native/typescript-config':
         specifier: ^0.86.0
@@ -298,6 +301,12 @@ importers:
         specifier: ^19.2.7
         version: 19.2.7(react@19.2.7)
     devDependencies:
+      '@types/react':
+        specifier: ^19.2.1
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: ^19.2.1
+        version: 19.2.3(@types/react@19.2.17)
       '@vitejs/plugin-react':
         specifier: ^6.0.3
         version: 6.0.3(vite@8.1.5(@types/node@26.1.1)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0))
@@ -959,6 +968,14 @@ packages:
   '@types/node@26.1.1':
     resolution: {integrity: sha512-nxAkRSVkN1Y0JC1W8ky/fTfkGsMmcrRsbx+3XoZE+rMOX71kLYTV7fLXpqud1GpbpP5TuffXFqfX7fH2GgZREw==}
 
+  '@types/react-dom@19.2.3':
+    resolution: {integrity: sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==}
+    peerDependencies:
+      '@types/react': ^19.2.0
+
+  '@types/react@19.2.17':
+    resolution: {integrity: sha512-MXfmqaVPEVgkBT/aY0aGCkRWWtByiYQXo3xdQ8r5RzuFrPiRn8Gar2tQdXSUQ2GKV3bkXckek89V8wQBY2Q/Aw==}
+
   '@types/yargs-parser@21.0.3':
     resolution: {integrity: sha512-I4q9QU9MQv4oEOz4tAHJtNz1cwuLxn2F3xcc2iV5WdqLPpUnj30aUuxt1mAxYTG+oe8CZMV/+6rU4S4gRDzqtQ==}
 
@@ -1392,6 +1409,9 @@ packages:
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
+
+  csstype@3.2.3:
+    resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
 
   debug@2.6.9:
     resolution: {integrity: sha512-bC7ElrdJaJnPbAP+1EotYvqZsb3ecl5wi6Bfi6BJTUcNowp6cvspg0jXznRTKDjm/E7AdgFBVeAPVMNcKGsHMA==}
@@ -2994,12 +3014,14 @@ snapshots:
 
   '@react-native/typescript-config@0.86.0': {}
 
-  '@react-native/virtualized-lists@0.86.0(react-native@0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(react@19.2.7)(supports-color@8.1.1))(react@19.2.7)':
+  '@react-native/virtualized-lists@0.86.0(@types/react@19.2.17)(react-native@0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.17)(react@19.2.7)(supports-color@8.1.1))(react@19.2.7)':
     dependencies:
       invariant: 2.2.4
       nullthrows: 1.1.1
       react: 19.2.7
-      react-native: 0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(react@19.2.7)(supports-color@8.1.1)
+      react-native: 0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.17)(react@19.2.7)(supports-color@8.1.1)
+    optionalDependencies:
+      '@types/react': 19.2.17
 
   '@rolldown/binding-android-arm64@1.1.5':
     optional: true
@@ -3097,6 +3119,14 @@ snapshots:
   '@types/node@26.1.1':
     dependencies:
       undici-types: 8.3.0
+
+  '@types/react-dom@19.2.3(@types/react@19.2.17)':
+    dependencies:
+      '@types/react': 19.2.17
+
+  '@types/react@19.2.17':
+    dependencies:
+      csstype: 3.2.3
 
   '@types/yargs-parser@21.0.3': {}
 
@@ -3492,6 +3522,8 @@ snapshots:
       path-key: 3.1.1
       shebang-command: 2.0.0
       which: 2.0.2
+
+  csstype@3.2.3: {}
 
   debug@2.6.9(supports-color@8.1.1):
     dependencies:
@@ -4336,7 +4368,7 @@ snapshots:
 
   react-is@18.3.1: {}
 
-  react-native@0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(react@19.2.7)(supports-color@8.1.1):
+  react-native@0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.17)(react@19.2.7)(supports-color@8.1.1):
     dependencies:
       '@react-native/assets-registry': 0.86.0
       '@react-native/codegen': 0.86.0(@babel/core@7.29.7(supports-color@8.1.1))
@@ -4344,7 +4376,7 @@ snapshots:
       '@react-native/gradle-plugin': 0.86.0
       '@react-native/js-polyfills': 0.86.0
       '@react-native/normalize-colors': 0.86.0
-      '@react-native/virtualized-lists': 0.86.0(react-native@0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(react@19.2.7)(supports-color@8.1.1))(react@19.2.7)
+      '@react-native/virtualized-lists': 0.86.0(@types/react@19.2.17)(react-native@0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.17)(react@19.2.7)(supports-color@8.1.1))(react@19.2.7)
       abort-controller: 3.0.0
       anser: 1.4.10
       ansi-regex: 5.0.1
@@ -4371,6 +4403,8 @@ snapshots:
       whatwg-fetch: 3.6.20
       ws: 7.5.13
       yargs: 17.7.3
+    optionalDependencies:
+      '@types/react': 19.2.17
     transitivePeerDependencies:
       - '@babel/core'
       - '@react-native-community/cli'

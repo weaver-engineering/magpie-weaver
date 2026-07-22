@@ -2,6 +2,7 @@
   "name": "magpie-weaver",
   "description": "The Magpie Weaver root package",
   "version": "0.1.0",
+  "type": "module",
   "private": true,
   "packageManager": "pnpm@11.15.1",
   "devEngines": {
@@ -24,6 +25,7 @@
     "eslint": "^10.7.0",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.65.0",
+    "@types/node": "^26.1.1",
     "vitest": "4.1.10"
   }
 }
