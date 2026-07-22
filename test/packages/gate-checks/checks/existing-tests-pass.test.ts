@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { fn, requiredArgs } from "@magpieweaver/gate-checks/src/checks/existing-tests-pass.js";
-import type { CoverageInspector, GitInspector, Inspectors } from "@magpieweaver/gate-checks/dist/types";
+import type { CoverageInspector, GitInspector, Inspectors } from "@magpieweaver/gate-checks/dist/types.js";
 
 function createMockInspectors(coverageExists: boolean, testsPass: boolean): Inspectors {
   return {

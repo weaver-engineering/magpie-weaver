@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fn, requiredArgs } from "@magpieweaver/gate-checks/src/checks/get-inbound-commits.js";
-import type { GitInspector } from "@magpieweaver/gate-checks/dist/git-interface";
-import type { CoverageInspector } from "@magpieweaver/gate-checks/dist/coverage-interface";
-import type { Inspectors } from "@magpieweaver/gate-checks/dist/types";
+import type { GitInspector } from "@magpieweaver/gate-checks/dist/git-interface.js";
+import type { CoverageInspector } from "@magpieweaver/gate-checks/dist/coverage-interface.js";
+import type { Inspectors } from "@magpieweaver/gate-checks/dist/types.js";
 
 function createMockInspectors(): Inspectors {
   return {

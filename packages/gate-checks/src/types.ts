@@ -1,5 +1,6 @@
-import { type CoverageInspector } from "./coverage-interface.js";
-import { type GitInspector } from "./git-interface.js";
+import type { CoverageInspector } from "./coverage-interface.js";
+import type { GitInspector } from "./git-interface.js";
+export type { CoverageInspector, GitInspector };
 
 /**
  * The standardised output of all gate checks.

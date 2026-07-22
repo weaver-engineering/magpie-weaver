@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { fn, requiredArgs } from "@magpieweaver/gate-checks/src/checks/pr-title.js";
-import type { Inspectors } from "@magpieweaver/gate-checks/dist/types";
+import type { Inspectors } from "@magpieweaver/gate-checks/dist/types.js";
 
 const mockInspectors = {} as unknown as Inspectors;
 
