@@ -41,12 +41,13 @@ describe("validate-build-commit", () => {
 
   describe("§3.6.1 Valid Build Commit", () => {
     it("returns passed=true with newFiles, modifiedFiles, deletedFiles values", async () => {
-      const result = await fn(inspectors, { "build-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "build-commit-ref": "abc123" });
       expect(result.passed).toBe(true);
       expect(result.violations).toHaveLength(0);
       expect(result.values.newFiles).toEqual(["packages/gate-checks/src/new-file.ts"]);
       expect(result.values.modifiedFiles).toEqual(["packages/gate-checks/src/index.ts"]);
       expect(result.values.deletedFiles).toEqual([]);
+      expect(result.values.ref).toBe("MAG-30");
     });
 
     it("allows changes in apps/ directory", async () => {
@@ -56,7 +57,7 @@ describe("validate-build-commit", () => {
       (inspectors.git.added as ReturnType<typeof vi.fn>).mockResolvedValue([
         "apps/web/src/app.ts",
       ]);
-      const result = await fn(inspectors, { "build-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "build-commit-ref": "abc123" });
       expect(result.passed).toBe(true);
     });
 
@@ -69,7 +70,12 @@ describe("validate-build-commit", () => {
         "package.json",
         "pnpm-lock.yaml",
       ]);
-      const result = await fn(inspectors, { "build-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "build-commit-ref": "abc123" });
+      expect(result.passed).toBe(true);
+    });
+
+    it("accepts --ref matching the commit ref", async () => {
+      const result = await fn(inspectors, { "build-commit-ref": "abc123", ref: "MAG-30" });
       expect(result.passed).toBe(true);
     });
   });
@@ -79,16 +85,25 @@ describe("validate-build-commit", () => {
       (inspectors.git.commitMessages as ReturnType<typeof vi.fn>).mockResolvedValue([
         "Bad title\n\nBody",
       ]);
-      const result = await fn(inspectors, { "build-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "build-commit-ref": "abc123" });
       expect(result.passed).toBe(false);
       expect(result.violations[0]).toContain("must start with a valid ref");
+    });
+
+    it("returns passed=false when title does not match --ref", async () => {
+      (inspectors.git.commitMessages as ReturnType<typeof vi.fn>).mockResolvedValue([
+        "MAG-99 Build\n\nBody",
+      ]);
+      const result = await fn(inspectors, { "build-commit-ref": "abc123", ref: "MAG-30" });
+      expect(result.passed).toBe(false);
+      expect(result.violations[0]).toContain("must start with ref \"MAG-30\"");
     });
 
     it("returns passed=false when title is only the ref", async () => {
       (inspectors.git.commitMessages as ReturnType<typeof vi.fn>).mockResolvedValue([
         "MAG-30\n\nBody",
       ]);
-      const result = await fn(inspectors, { "build-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "build-commit-ref": "abc123" });
       expect(result.passed).toBe(false);
       expect(result.violations[0]).toBe("Commit message title must continue beyond the ref");
     });
@@ -97,7 +112,7 @@ describe("validate-build-commit", () => {
       (inspectors.git.commitMessages as ReturnType<typeof vi.fn>).mockResolvedValue([
         "MAG-30 Title",
       ]);
-      const result = await fn(inspectors, { "build-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "build-commit-ref": "abc123" });
       expect(result.passed).toBe(false);
       expect(result.violations[0]).toBe("Commit message body must not be empty");
     });
@@ -108,7 +123,7 @@ describe("validate-build-commit", () => {
       (inspectors.git.diffTree as ReturnType<typeof vi.fn>).mockResolvedValue([
         "docs/readme.md",
       ]);
-      const result = await fn(inspectors, { "build-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "build-commit-ref": "abc123" });
       expect(result.passed).toBe(false);
       expect(result.violations[0]).toContain("Changes outside allowed paths");
       expect(result.violations[0]).toContain("docs/readme.md");
@@ -119,26 +134,26 @@ describe("validate-build-commit", () => {
         "packages/core/src/index.ts",
         "docs/readme.md",
       ]);
-      const result = await fn(inspectors, { "build-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "build-commit-ref": "abc123" });
       expect(result.passed).toBe(false);
       expect(result.violations[0]).toContain("docs/readme.md");
     });
   });
 
-  describe("throws on invalid sha", () => {
+  describe("throws on invalid ref", () => {
     it("throws when commitMessages rejects", async () => {
       (inspectors.git.commitMessages as ReturnType<typeof vi.fn>).mockRejectedValue(
         new Error("fatal"),
       );
       await expect(
-        fn(inspectors, { "build-commit-sha": "bad-sha" }),
+        fn(inspectors, { "build-commit-ref": "bad-ref" }),
       ).rejects.toThrow("Invalid argument");
     });
   });
 
   describe("requiredArgs", () => {
-    it("exports the correct required argument names", () => {
-      expect(requiredArgs).toEqual(["build-commit-sha"]);
+    it("exports an empty required args list", () => {
+      expect(requiredArgs).toEqual([]);
     });
   });
 });

@@ -162,6 +162,10 @@ export class GitInspectorImpl implements GitInspector {
     return this.splitLines(output);
   }
 
+  async currentBranch(): Promise<string> {
+    return (await this.git.raw(["rev-parse", "--abbrev-ref", "HEAD"])).trim();
+  }
+
   /**
    * Run git diff with a specific --diff-filter to list files of a change type.
    *

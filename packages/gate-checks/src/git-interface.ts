@@ -88,4 +88,11 @@ export interface GitInspector {
    * @returns The commit references between baseRef and headRef
    */
   revList(baseRef: string, headRef: string): Promise<string[]>;
+
+  /**
+   * Get the name of the current branch.
+   *
+   * @returns The name of the current branch
+   */
+  currentBranch(): Promise<string>;
 }

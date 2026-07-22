@@ -56,23 +56,23 @@ describe("CLI", () => {
     it("exits 2 when a required argument is missing", () => {
       const { stdout, status } = runCli([
         "get-inbound-commits",
-        "--pr-base-sha",
+        "--base-ref",
         "HEAD",
         "--json",
       ]);
       const parsed = JSON.parse(stdout);
       expect(status).toBe(2);
       expect(parsed.violations).toContain(
-        "Missing required argument: --pr-head-sha",
+        "Missing required argument: --head-ref",
       );
     });
 
     it("exits 2 when check function throws", () => {
       const { stdout, status } = runCli([
         "get-inbound-commits",
-        "--pr-base-sha",
-        "INVALID_SHA_THAT_DOES_NOT_EXIST_12345",
-        "--pr-head-sha",
+        "--base-ref",
+        "INVALID_REF_THAT_DOES_NOT_EXIST_12345",
+        "--head-ref",
         "ALSO_INVALID_67890",
         "--json",
       ]);
@@ -83,12 +83,12 @@ describe("CLI", () => {
   });
 
   describe("check execution", () => {
-    it("exits 1 when same base/head sha (no commits)", () => {
+    it("exits 1 when same base/head ref (no commits)", () => {
       const { stdout, status } = runCli([
         "get-inbound-commits",
-        "--pr-base-sha",
+        "--base-ref",
         "HEAD",
-        "--pr-head-sha",
+        "--head-ref",
         "HEAD",
         "--json",
       ]);
@@ -97,16 +97,16 @@ describe("CLI", () => {
       expect(parsed.check).toBe("get-inbound-commits");
       expect(parsed.passed).toBe(false);
       expect(parsed.violations).toContain(
-        "No commits between --pr-base-sha and --pr-head-sha",
+        "No commits between --base-ref and --head-ref",
       );
     });
 
-    it("exits 0 when different base/head sha (commits found)", () => {
+    it("exits 0 when different base/head ref (commits found)", () => {
       const { stdout, status } = runCli([
         "get-inbound-commits",
-        "--pr-base-sha",
+        "--base-ref",
         "HEAD~1",
-        "--pr-head-sha",
+        "--head-ref",
         "HEAD",
         "--json",
       ]);
@@ -124,9 +124,9 @@ describe("CLI", () => {
     it("outputs valid JSON when --json flag is used", () => {
       const { stdout, status } = runCli([
         "get-inbound-commits",
-        "--pr-base-sha",
+        "--base-ref",
         "HEAD",
-        "--pr-head-sha",
+        "--head-ref",
         "HEAD",
         "--json",
       ]);
@@ -143,9 +143,9 @@ describe("CLI", () => {
     it("outputs human-readable text when --json is absent", () => {
       const { stdout, status } = runCli([
         "get-inbound-commits",
-        "--pr-base-sha",
+        "--base-ref",
         "HEAD",
-        "--pr-head-sha",
+        "--head-ref",
         "HEAD",
       ]);
       expect(status).toBe(1);
@@ -168,9 +168,9 @@ describe("CLI", () => {
     it("outputs PASS and summary in human mode on success", () => {
       const { stdout, status } = runCli([
         "get-inbound-commits",
-        "--pr-base-sha",
+        "--base-ref",
         "HEAD~1",
-        "--pr-head-sha",
+        "--head-ref",
         "HEAD",
       ]);
       expect(status).toBe(0);

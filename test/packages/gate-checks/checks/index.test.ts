@@ -8,20 +8,21 @@ describe("checks/index catalog", () => {
   });
 
   const expectedChecks: Record<string, string[]> = {
-    "pr-and-branch-refs": ["head-ref", "pr-base-ref"],
+    "branch-ref": [],
     "pr-title": ["ref", "pr-title"],
-    "get-inbound-commits": ["pr-base-sha", "pr-head-sha"],
-    "validate-spec-commit": ["spec-commit-sha"],
-    "validate-test-commit": ["test-commit-sha"],
-    "validate-build-commit": ["build-commit-sha"],
-    "validate-task-commit": ["task-commit-sha"],
+    "get-inbound-commits": ["base-ref", "head-ref"],
+    "validate-spec-commit": [],
+    "validate-test-commit": [],
+    "validate-build-commit": [],
+    "validate-task-commit": [],
     "existing-tests-pass": ["pr-base-sha", "pr-head-sha"],
     "new-tests-fail": ["pr-base-sha", "pr-head-sha"],
     "coverage": ["expect-failure"],
     "spec-gate": [],
+    "test-gate": [],
   };
 
-  describe("all 11 checks are registered", () => {
+  describe("all 12 checks are registered", () => {
     for (const [name, args] of Object.entries(expectedChecks)) {
       it(`has "${name}" with fn and requiredArgs ${JSON.stringify(args)}`, () => {
         const entry = catalog[name];

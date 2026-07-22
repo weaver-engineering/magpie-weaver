@@ -1,25 +1,40 @@
 import { type GateCheckResult, type GateCheckFn } from "../types.js";
 import { parseCommitMessage, isValidRef, commitTitleStartsWithRef, commitTitleContinuesBeyondRef } from "./helpers.js";
 
-export const requiredArgs: [string, ...string[]] = ["spec-commit-sha"];
+export const requiredArgs: string[] = [];
 
 export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult> => {
-  const commitSha = args["spec-commit-sha"] as string;
+  const commitRef = (args["spec-commit-ref"] as string) ?? "HEAD";
   const violations: string[] = [];
   const messages: string[] = [];
 
   let commitMessage: string;
   try {
-    const msgs = await inspectors.git.commitMessages(commitSha);
+    const msgs = await inspectors.git.commitMessages(commitRef);
     commitMessage = msgs[0] ?? "";
   } catch {
     throw new Error(
-      `Invalid argument: --spec-commit-sha="${commitSha}" could not be resolved`,
+      `Invalid argument: --spec-commit-ref="${commitRef}" could not be resolved`,
     );
   }
 
   const parsed = parseCommitMessage(commitMessage);
-  if (!parsed.ref || !isValidRef(parsed.ref)) {
+  const explicitRef = args["ref"] as string | undefined;
+
+  if (explicitRef) {
+    if (parsed.ref !== explicitRef) {
+      violations.push(`Commit message title must start with ref "${explicitRef}"`);
+      return {
+        check: "validate-spec-commit",
+        args,
+        passed: false,
+        messages,
+        violations,
+        summary: violations.join("; "),
+        values: {},
+      };
+    }
+  } else if (!parsed.ref || !isValidRef(parsed.ref)) {
     violations.push("Commit message title must start with a valid ref matching [A-Z]+-[0-9]+");
     return {
       check: "validate-spec-commit",
@@ -32,7 +47,7 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
     };
   }
 
-  const ref = parsed.ref;
+  const ref = parsed.ref!;
 
   if (!commitTitleStartsWithRef(parsed.title, ref)) {
     violations.push(`Commit message title must start with "${ref}"`);
@@ -50,7 +65,7 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
 
   let taskFiles: string[];
   try {
-    taskFiles = await inspectors.git.lsTree(commitSha, taskDir);
+    taskFiles = await inspectors.git.lsTree(commitRef, taskDir);
   } catch {
     taskFiles = [];
   }
@@ -73,7 +88,7 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
     violations.push("No specification files found");
   }
 
-  const changedFiles = await inspectors.git.diffTree(commitSha);
+  const changedFiles = await inspectors.git.diffTree(commitRef);
   const changesOutside = changedFiles.filter((f) => !f.startsWith(taskDir));
 
   if (changesOutside.length > 0) {
@@ -87,6 +102,6 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
     messages,
     violations,
     summary: violations.length === 0 ? "Valid spec commit" : violations.join("; "),
-    values: { task: taskFile, specs: specFiles },
+    values: { task: taskFile, specs: specFiles, ref },
   };
 };

@@ -38,13 +38,36 @@ describe("validate-spec-commit", () => {
 
   describe("§3.4.1 Valid Spec Commit", () => {
     it("returns passed=true with task and specs values", async () => {
-      const result = await fn(inspectors, { "spec-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "spec-commit-ref": "abc123" });
       expect(result.passed).toBe(true);
       expect(result.violations).toHaveLength(0);
       expect(result.values.task).toBe("docs/tasks/task-MAG-30/task-MAG-30.md");
       expect(result.values.specs).toEqual([
         "docs/tasks/task-MAG-30/task-MAG-30-04-pnpm-gate-check-spec.md",
       ]);
+      expect(result.values.ref).toBe("MAG-30");
+    });
+
+    it("defaults spec-commit-ref to HEAD", async () => {
+      (inspectors.git.commitMessages as ReturnType<typeof vi.fn>).mockResolvedValue([
+        "MAG-30 Add spec\n\nBody",
+      ]);
+      (inspectors.git.lsTree as ReturnType<typeof vi.fn>).mockResolvedValue([
+        "docs/tasks/task-MAG-30/task-MAG-30.md",
+        "docs/tasks/task-MAG-30/task-MAG-30-04-spec.md",
+      ]);
+      (inspectors.git.diffTree as ReturnType<typeof vi.fn>).mockResolvedValue([
+        "docs/tasks/task-MAG-30/task-MAG-30-04-spec.md",
+      ]);
+      const result = await fn(inspectors, {});
+      expect(result.passed).toBe(true);
+      expect(inspectors.git.commitMessages).toHaveBeenCalledWith("HEAD");
+    });
+
+    it("accepts --ref matching the commit ref", async () => {
+      const result = await fn(inspectors, { "spec-commit-ref": "abc123", ref: "MAG-30" });
+      expect(result.passed).toBe(true);
+      expect(result.values.ref).toBe("MAG-30");
     });
   });
 
@@ -53,16 +76,25 @@ describe("validate-spec-commit", () => {
       (inspectors.git.commitMessages as ReturnType<typeof vi.fn>).mockResolvedValue([
         "Bad title\n\nBody",
       ]);
-      const result = await fn(inspectors, { "spec-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "spec-commit-ref": "abc123" });
       expect(result.passed).toBe(false);
       expect(result.violations[0]).toContain("must start with a valid ref");
+    });
+
+    it("returns passed=false when title does not match --ref", async () => {
+      (inspectors.git.commitMessages as ReturnType<typeof vi.fn>).mockResolvedValue([
+        "MAG-99 Add spec\n\nBody",
+      ]);
+      const result = await fn(inspectors, { "spec-commit-ref": "abc123", ref: "MAG-30" });
+      expect(result.passed).toBe(false);
+      expect(result.violations[0]).toContain("must start with ref \"MAG-30\"");
     });
 
     it("returns passed=false when title is only the ref", async () => {
       (inspectors.git.commitMessages as ReturnType<typeof vi.fn>).mockResolvedValue([
         "MAG-30\n\nBody",
       ]);
-      const result = await fn(inspectors, { "spec-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "spec-commit-ref": "abc123" });
       expect(result.passed).toBe(false);
       expect(result.violations[0]).toBe("Commit message title must continue beyond the ref");
     });
@@ -71,7 +103,7 @@ describe("validate-spec-commit", () => {
       (inspectors.git.commitMessages as ReturnType<typeof vi.fn>).mockResolvedValue([
         "MAG-30 Title",
       ]);
-      const result = await fn(inspectors, { "spec-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "spec-commit-ref": "abc123" });
       expect(result.passed).toBe(false);
       expect(result.violations[0]).toBe("Commit message body must not be empty");
     });
@@ -80,7 +112,7 @@ describe("validate-spec-commit", () => {
   describe("§3.4.3 Task Directory Missing", () => {
     it("returns passed=false when lsTree returns empty for task dir", async () => {
       (inspectors.git.lsTree as ReturnType<typeof vi.fn>).mockResolvedValue([]);
-      const result = await fn(inspectors, { "spec-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "spec-commit-ref": "abc123" });
       expect(result.passed).toBe(false);
       expect(result.violations[0]).toBe("Task directory \"docs/tasks/task-MAG-30\" does not exist");
     });
@@ -92,7 +124,7 @@ describe("validate-spec-commit", () => {
         "docs/tasks/task-MAG-30/spec.md",
         "src/other-file.ts",
       ]);
-      const result = await fn(inspectors, { "spec-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "spec-commit-ref": "abc123" });
       expect(result.passed).toBe(false);
       expect(result.violations[0]).toContain("Changes outside task directory");
       expect(result.violations[0]).toContain("src/other-file.ts");
@@ -105,7 +137,7 @@ describe("validate-spec-commit", () => {
         "docs/tasks/task-MAG-30/some-other-file.md",
         "docs/tasks/task-MAG-30/task-MAG-30-04-spec.md",
       ]);
-      const result = await fn(inspectors, { "spec-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "spec-commit-ref": "abc123" });
       expect(result.passed).toBe(false);
       expect(result.violations[0]).toBe("Task file \"docs/tasks/task-MAG-30/task-MAG-30.md\" does not exist");
     });
@@ -117,26 +149,26 @@ describe("validate-spec-commit", () => {
         "docs/tasks/task-MAG-30/task-MAG-30.md",
         "docs/tasks/task-MAG-30/readme.md",
       ]);
-      const result = await fn(inspectors, { "spec-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "spec-commit-ref": "abc123" });
       expect(result.passed).toBe(false);
       expect(result.violations).toContain("No specification files found");
     });
   });
 
-  describe("throws on invalid sha", () => {
+  describe("throws on invalid ref", () => {
     it("throws when commitMessages rejects", async () => {
       (inspectors.git.commitMessages as ReturnType<typeof vi.fn>).mockRejectedValue(
         new Error("fatal"),
       );
       await expect(
-        fn(inspectors, { "spec-commit-sha": "bad-sha" }),
+        fn(inspectors, { "spec-commit-ref": "bad-ref" }),
       ).rejects.toThrow("Invalid argument");
     });
   });
 
   describe("requiredArgs", () => {
-    it("exports the correct required argument names", () => {
-      expect(requiredArgs).toEqual(["spec-commit-sha"]);
+    it("exports an empty required args list", () => {
+      expect(requiredArgs).toEqual([]);
     });
   });
 });

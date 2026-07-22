@@ -1,18 +1,18 @@
 import { type GateCheckResult, type GateCheckFn } from "../types.js";
 
-export const requiredArgs: [string, ...string[]] = ["pr-base-sha", "pr-head-sha"];
+export const requiredArgs: [string, ...string[]] = ["base-ref", "head-ref"];
 
 export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult> => {
-  const prBaseSha = args["pr-base-sha"] as string;
-  const prHeadSha = args["pr-head-sha"] as string;
+  const baseRef = args["base-ref"] as string;
+  const headRef = args["head-ref"] as string;
 
-  if (prBaseSha === prHeadSha) {
+  if (baseRef === headRef) {
     return {
       check: "get-inbound-commits",
       args,
       passed: false,
       messages: [],
-      violations: ["No commits between --pr-base-sha and --pr-head-sha"],
+      violations: ["No commits between --base-ref and --head-ref"],
       summary: "No commits found",
       values: {},
     };
@@ -20,10 +20,10 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
 
   let commits: string[];
   try {
-    commits = await inspectors.git.revList(prBaseSha, prHeadSha);
+    commits = await inspectors.git.revList(baseRef, headRef);
   } catch {
     throw new Error(
-      `Invalid argument: --pr-base-sha="${prBaseSha}" or --pr-head-sha="${prHeadSha}" could not be resolved`,
+      `Invalid argument: --base-ref="${baseRef}" or --head-ref="${headRef}" could not be resolved`,
     );
   }
 
@@ -33,7 +33,7 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
       args,
       passed: false,
       messages: [],
-      violations: ["No commits between --pr-base-sha and --pr-head-sha"],
+      violations: ["No commits between --base-ref and --head-ref"],
       summary: "No commits found",
       values: {},
     };

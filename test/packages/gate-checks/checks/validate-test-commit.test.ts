@@ -38,9 +38,10 @@ describe("validate-test-commit", () => {
 
   describe("§3.5.1 Valid Test Commit", () => {
     it("returns passed=true when commit only changes test/ and adds new test", async () => {
-      const result = await fn(inspectors, { "test-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "test-commit-ref": "abc123" });
       expect(result.passed).toBe(true);
       expect(result.violations).toHaveLength(0);
+      expect(result.values.ref).toBe("MAG-30");
     });
 
     it("returns passed=true with allowed paths package.json and pnpm-lock.yaml", async () => {
@@ -51,7 +52,7 @@ describe("validate-test-commit", () => {
       (inspectors.git.added as ReturnType<typeof vi.fn>).mockResolvedValue([
         "test/new.test.ts",
       ]);
-      const result = await fn(inspectors, { "test-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "test-commit-ref": "abc123" });
       expect(result.passed).toBe(true);
     });
 
@@ -68,9 +69,14 @@ describe("validate-test-commit", () => {
         "test/b.test.ts",
         "test/existing.test.ts",
       ]);
-      const result = await fn(inspectors, { "test-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "test-commit-ref": "abc123" });
       expect(result.values.newTests).toEqual(["test/a.test.ts", "test/b.test.ts"]);
       expect(result.values.existingTests).toEqual(["test/existing.test.ts"]);
+    });
+
+    it("accepts --ref matching the commit ref", async () => {
+      const result = await fn(inspectors, { "test-commit-ref": "abc123", ref: "MAG-30" });
+      expect(result.passed).toBe(true);
     });
   });
 
@@ -79,16 +85,25 @@ describe("validate-test-commit", () => {
       (inspectors.git.commitMessages as ReturnType<typeof vi.fn>).mockResolvedValue([
         "Bad title\n\nBody",
       ]);
-      const result = await fn(inspectors, { "test-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "test-commit-ref": "abc123" });
       expect(result.passed).toBe(false);
       expect(result.violations[0]).toContain("must start with a valid ref");
+    });
+
+    it("returns passed=false when title does not match --ref", async () => {
+      (inspectors.git.commitMessages as ReturnType<typeof vi.fn>).mockResolvedValue([
+        "MAG-99 Add tests\n\nBody",
+      ]);
+      const result = await fn(inspectors, { "test-commit-ref": "abc123", ref: "MAG-30" });
+      expect(result.passed).toBe(false);
+      expect(result.violations[0]).toContain("must start with ref \"MAG-30\"");
     });
 
     it("returns passed=false when title is only the ref", async () => {
       (inspectors.git.commitMessages as ReturnType<typeof vi.fn>).mockResolvedValue([
         "MAG-30\n\nBody",
       ]);
-      const result = await fn(inspectors, { "test-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "test-commit-ref": "abc123" });
       expect(result.passed).toBe(false);
       expect(result.violations[0]).toBe("Commit message title must continue beyond the ref");
     });
@@ -97,7 +112,7 @@ describe("validate-test-commit", () => {
       (inspectors.git.commitMessages as ReturnType<typeof vi.fn>).mockResolvedValue([
         "MAG-30 Title",
       ]);
-      const result = await fn(inspectors, { "test-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "test-commit-ref": "abc123" });
       expect(result.passed).toBe(false);
       expect(result.violations[0]).toBe("Commit message body must not be empty");
     });
@@ -109,7 +124,7 @@ describe("validate-test-commit", () => {
         "src/code.ts",
         "test/new.test.ts",
       ]);
-      const result = await fn(inspectors, { "test-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "test-commit-ref": "abc123" });
       expect(result.passed).toBe(false);
       expect(result.violations[0]).toContain("Changes outside allowed paths");
       expect(result.violations[0]).toContain("src/code.ts");
@@ -121,7 +136,7 @@ describe("validate-test-commit", () => {
       (inspectors.git.modified as ReturnType<typeof vi.fn>).mockResolvedValue([
         "test/existing.test.ts",
       ]);
-      const result = await fn(inspectors, { "test-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "test-commit-ref": "abc123" });
       expect(result.passed).toBe(false);
       expect(result.violations[0]).toBe("Existing tests must not be changed: test/existing.test.ts");
     });
@@ -130,26 +145,26 @@ describe("validate-test-commit", () => {
   describe("§3.5.5 No New Tests Defined", () => {
     it("returns passed=false when no new test files added", async () => {
       (inspectors.git.added as ReturnType<typeof vi.fn>).mockResolvedValue([]);
-      const result = await fn(inspectors, { "test-commit-sha": "abc123" });
+      const result = await fn(inspectors, { "test-commit-ref": "abc123" });
       expect(result.passed).toBe(false);
       expect(result.violations[0]).toBe("At least one new test must be defined in test/");
     });
   });
 
-  describe("throws on invalid sha", () => {
+  describe("throws on invalid ref", () => {
     it("throws when commitMessages rejects", async () => {
       (inspectors.git.commitMessages as ReturnType<typeof vi.fn>).mockRejectedValue(
         new Error("fatal"),
       );
       await expect(
-        fn(inspectors, { "test-commit-sha": "bad-sha" }),
+        fn(inspectors, { "test-commit-ref": "bad-ref" }),
       ).rejects.toThrow("Invalid argument");
     });
   });
 
   describe("requiredArgs", () => {
-    it("exports the correct required argument names", () => {
-      expect(requiredArgs).toEqual(["test-commit-sha"]);
+    it("exports an empty required args list", () => {
+      expect(requiredArgs).toEqual([]);
     });
   });
 });
