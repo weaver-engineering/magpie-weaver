@@ -54,31 +54,33 @@ function parseArgs(
   return { checkName, json, args: parsed };
 }
 
+
+
 function writeJson(result: GateCheckResult): void {
-  console.log(JSON.stringify(result));
+  process.stdout.write(JSON.stringify(result) + "\n");
 }
 
 function writeHuman(result: GateCheckResult): void {
   const status = result.passed ? "PASS" : "FAIL";
-  console.log(`[gate-check] ${result.check}: ${status}`);
+  process.stdout.write(`[gate-check] ${result.check}: ${status}\n`);
   for (const msg of result.messages) {
-    console.log(`  [info] ${msg}`);
+    process.stdout.write(`  [info] ${msg}\n`);
   }
   for (const v of result.violations) {
-    console.log(`  [violation] ${v}`);
+    process.stdout.write(`  [violation] ${v}\n`);
   }
   const valueKeys = Object.keys(result.values);
   if (valueKeys.length > 0) {
     for (const key of valueKeys) {
       const val = result.values[key];
       const display = Array.isArray(val) ? val.join(", ") : String(val);
-      console.log(`  [export] ${key}: ${display}`);
+      process.stdout.write(`  [export] ${key}: ${display}\n`);
     }
   }
-  console.log(`  summary: ${result.summary}`);
+  process.stdout.write(`  summary: ${result.summary}\n`);
 }
 
-function exitInvalid(checkName: string, message: string, json: boolean): never {
+function exitInvalid(checkName: string, message: string, json: boolean): void {
   const result: GateCheckResult = {
     check: checkName || "unknown",
     args: {},
@@ -93,7 +95,7 @@ function exitInvalid(checkName: string, message: string, json: boolean): never {
   } else {
     writeHuman(result);
   }
-  process.exit(2);
+  process.exitCode = 2;
 }
 
 async function main(): Promise<void> {
@@ -101,16 +103,19 @@ async function main(): Promise<void> {
 
   if (!checkName) {
     exitInvalid(checkName, "No check name provided", json);
+    return;
   }
 
   const def = catalog[checkName];
   if (!def) {
     exitInvalid(checkName, `Check "${checkName}" not found`, json);
+    return;
   }
 
   for (const requiredArg of def.requiredArgs) {
     if (!(requiredArg in args)) {
       exitInvalid(checkName, `Missing required argument: --${requiredArg}`, json);
+      return;
     }
   }
 
@@ -126,6 +131,7 @@ async function main(): Promise<void> {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     exitInvalid(checkName, msg, json);
+    return;
   }
 
   if (json) {
@@ -134,10 +140,10 @@ async function main(): Promise<void> {
     writeHuman(result);
   }
 
-  process.exit(result.passed ? 0 : 1);
+  process.exitCode = result.passed ? 0 : 1;
 }
 
 main().catch((e) => {
   console.error("Fatal error:", e);
-  process.exit(2);
+  process.exitCode = 2;
 });
