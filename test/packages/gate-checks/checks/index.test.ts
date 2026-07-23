@@ -20,9 +20,10 @@ describe("checks/index catalog", () => {
     "coverage": ["expect-failure"],
     "test-gate": [],
     "build-gate": [],
+    "main-gate": [],
   };
 
-  describe("all 12 checks are registered", () => {
+  describe("all 13 checks are registered", () => {
     for (const [name, args] of Object.entries(expectedChecks)) {
       it(`has "${name}" with fn and requiredArgs ${JSON.stringify(args)}`, () => {
         const entry = catalog[name];

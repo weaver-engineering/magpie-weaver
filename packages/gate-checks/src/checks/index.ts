@@ -11,6 +11,7 @@ import { fn as newTestsFail, requiredArgs as newTestsFailArgs } from "./new-test
 import { fn as coverage, requiredArgs as coverageArgs } from "./coverage.js";
 import { fn as testGate, requiredArgs as testGateArgs } from "./test-gate.js";
 import { fn as buildGate, requiredArgs as buildGateArgs } from "./build-gate.js";
+import { fn as mainGate, requiredArgs as mainGateArgs } from "./main-gate.js";
 
 export const catalog: FunctionCatalog = {
   "branch-ref": { fn: branchRefFn, requiredArgs: branchRefArgs },
@@ -25,4 +26,5 @@ export const catalog: FunctionCatalog = {
   "coverage": { fn: coverage, requiredArgs: coverageArgs },
   "test-gate": { fn: testGate, requiredArgs: testGateArgs },
   "build-gate": { fn: buildGate, requiredArgs: buildGateArgs },
+  "main-gate": { fn: mainGate, requiredArgs: mainGateArgs },
 };
