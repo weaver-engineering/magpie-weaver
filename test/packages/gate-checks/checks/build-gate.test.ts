@@ -15,14 +15,30 @@ function createMockInspectors(): Inspectors {
       modified: vi.fn(),
       deleted: vi.fn(),
       revList: vi.fn(),
-      currentBranch: vi.fn().mockResolvedValue("task/MAG-30"),
+      currentBranch: vi.fn().mockResolvedValue("build/MAG-30"),
+      workingTreeChanges: vi.fn(),
     } as unknown as GitInspector,
     coverage: {
       runTestsWithCoverage: vi.fn(),
       getNewLineCoverage: vi.fn(),
       getCoverage: vi.fn(),
+      getTestResults: vi.fn(),
     } as unknown as CoverageInspector,
   };
+}
+
+function setupCoverageMocks(inspectors: Inspectors): void {
+  (inspectors.coverage.runTestsWithCoverage as ReturnType<typeof vi.fn>).mockImplementation(() => {
+    throw new Error("Tests failed");
+  });
+  (inspectors.coverage.getCoverage as ReturnType<typeof vi.fn>).mockResolvedValue(85);
+  (inspectors.coverage.getNewLineCoverage as ReturnType<typeof vi.fn>).mockResolvedValue(95);
+  (inspectors.coverage.getTestResults as ReturnType<typeof vi.fn>).mockResolvedValue({
+    numTotalTests: 10,
+    numFailedTests: 1,
+    failingTestFiles: ["test/new.test.ts"],
+  });
+  (inspectors.git.workingTreeChanges as ReturnType<typeof vi.fn>).mockResolvedValue([]);
 }
 
 describe("build-gate", () => {
@@ -32,8 +48,10 @@ describe("build-gate", () => {
     inspectors = createMockInspectors();
   });
 
-  describe("Valid test gate", () => {
+  describe("Valid build gate", () => {
     it("returns passed=true for exactly 2 commits with valid spec and test commits", async () => {
+      (inspectors.git.currentBranch as ReturnType<typeof vi.fn>).mockResolvedValue("build/MAG-30");
+
       const mockMergeBase = inspectors.git.mergeBase as ReturnType<typeof vi.fn>;
       mockMergeBase.mockResolvedValue("merge-base-sha");
 
@@ -76,6 +94,8 @@ describe("build-gate", () => {
       const mockModified = inspectors.git.modified as ReturnType<typeof vi.fn>;
       mockModified.mockResolvedValue([]);
 
+      setupCoverageMocks(inspectors);
+
       const result = await fn(inspectors, {
         "destination-branch": "main",
       });
@@ -87,6 +107,8 @@ describe("build-gate", () => {
     });
 
     it("defaults destination-branch to main when not provided", async () => {
+      (inspectors.git.currentBranch as ReturnType<typeof vi.fn>).mockResolvedValue("build/MAG-30");
+
       const mockMergeBase = inspectors.git.mergeBase as ReturnType<typeof vi.fn>;
       mockMergeBase.mockResolvedValue("merge-base-sha");
 
@@ -128,6 +150,8 @@ describe("build-gate", () => {
 
       const mockModified = inspectors.git.modified as ReturnType<typeof vi.fn>;
       mockModified.mockResolvedValue([]);
+
+      setupCoverageMocks(inspectors);
 
       const result = await fn(inspectors, {});
 

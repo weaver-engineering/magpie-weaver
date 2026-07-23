@@ -16,13 +16,27 @@ function createMockInspectors(): Inspectors {
       deleted: vi.fn(),
       revList: vi.fn(),
       currentBranch: vi.fn().mockResolvedValue("build/MAG-30"),
+      workingTreeChanges: vi.fn(),
     } as unknown as GitInspector,
     coverage: {
       runTestsWithCoverage: vi.fn(),
       getNewLineCoverage: vi.fn(),
       getCoverage: vi.fn(),
+      getTestResults: vi.fn(),
     } as unknown as CoverageInspector,
   };
+}
+
+function setupCoverageMocks(inspectors: Inspectors): void {
+  (inspectors.coverage.runTestsWithCoverage as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+  (inspectors.coverage.getCoverage as ReturnType<typeof vi.fn>).mockResolvedValue(85);
+  (inspectors.coverage.getNewLineCoverage as ReturnType<typeof vi.fn>).mockResolvedValue(95);
+  (inspectors.coverage.getTestResults as ReturnType<typeof vi.fn>).mockResolvedValue({
+    numTotalTests: 10,
+    numFailedTests: 1,
+    failingTestFiles: ["test/new.test.ts"],
+  });
+  (inspectors.git.workingTreeChanges as ReturnType<typeof vi.fn>).mockResolvedValue([]);
 }
 
 function setupBuildSuccess(inspectors: Inspectors): void {
@@ -95,6 +109,7 @@ describe("main-gate", () => {
   describe("Valid build branch", () => {
     it("returns passed=true for exactly 3 commits with valid spec, test, build commits", async () => {
       setupBuildSuccess(inspectors);
+      setupCoverageMocks(inspectors);
 
       const result = await fn(inspectors, { "destination-branch": "main" });
 
@@ -105,6 +120,7 @@ describe("main-gate", () => {
 
     it("defaults destination-branch to main when not provided", async () => {
       setupBuildSuccess(inspectors);
+      setupCoverageMocks(inspectors);
 
       const result = await fn(inspectors, {});
 

@@ -2,6 +2,9 @@ import { type GateCheckResult, type GateCheckFn } from "../types.js";
 import { fn as branchRef } from "./branch-ref.js";
 import { fn as validateSpecCommit } from "./validate-spec-commit.js";
 import { fn as validateTestCommit } from "./validate-test-commit.js";
+import { fn as coverage } from "./coverage.js";
+import { fn as existingTestsPass } from "./existing-tests-pass.js";
+import { fn as newTestsFail } from "./new-tests-fail.js";
 
 export const requiredArgs: string[] = [];
 
@@ -99,19 +102,65 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
       values: { commit: commits[1], ...specResult.values },
     };
   }
+  messages.push(...specResult.messages);
 
   const testResult = await validateTestCommit(inspectors, {
     "test-commit-ref": commits[0],
     ref,
   });
 
+  if (!testResult.passed) {
+    return {
+      check: "build-gate",
+      args,
+      passed: false,
+      messages: [...messages, ...testResult.messages],
+      violations: testResult.violations,
+      summary: testResult.summary,
+      values: { commit: commits[0], specCommit: commits[1], ...specResult.values, ...testResult.values },
+    };
+  }
+  messages.push(...testResult.messages);
+
+  const newTestsRaw = testResult.values?.newTests;
+  const newTestList: string[] = Array.isArray(newTestsRaw)
+    ? (newTestsRaw as string[])
+    : (newTestsRaw ? [String(newTestsRaw)] : []);
+
+  const coverageResult = await coverage(inspectors, { "expect-failure": true });
+  messages.push(...coverageResult.messages);
+  violations.push(...coverageResult.violations);
+
+  const existingPassResult = await existingTestsPass(
+    inspectors,
+    { newTests: newTestList } as unknown as Record<string, boolean | number | string>,
+  );
+  messages.push(...existingPassResult.messages);
+  violations.push(...existingPassResult.violations);
+
+  const newTestsFailResult = await newTestsFail(
+    inspectors,
+    { newTests: newTestList } as unknown as Record<string, boolean | number | string>,
+  );
+  messages.push(...newTestsFailResult.messages);
+  violations.push(...newTestsFailResult.violations);
+
+  const passed = coverageResult.passed && existingPassResult.passed && newTestsFailResult.passed;
   return {
     check: "build-gate",
     args,
-    passed: testResult.passed,
-    messages: [...messages, ...specResult.messages, ...testResult.messages],
-    violations: testResult.violations,
-    summary: testResult.passed ? "Build gate passed" : testResult.summary,
-    values: { commit: commits[0], specCommit: commits[1], ...specResult.values, ...testResult.values },
+    passed,
+    messages,
+    violations,
+    summary: passed ? "Build gate passed" : violations.join("; "),
+    values: {
+      commit: commits[0],
+      specCommit: commits[1],
+      ...specResult.values,
+      ...testResult.values,
+      ...coverageResult.values,
+      ...existingPassResult.values,
+      ...newTestsFailResult.values,
+    },
   };
 };
