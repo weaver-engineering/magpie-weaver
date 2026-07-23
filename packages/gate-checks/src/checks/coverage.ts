@@ -7,61 +7,40 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
   const messages: string[] = [];
   const expectFailure = args["expect-failure"] === true || args["expect-failure"] === "true";
 
-  let coverageExists = false;
+  let testsFailed = false;
   try {
-    await inspectors.coverage.getCoverage();
-    coverageExists = true;
+    inspectors.coverage.runTestsWithCoverage();
+    messages.push("Tests run with coverage");
   } catch {
-    // coverage not run
+    testsFailed = true;
+    messages.push("Tests run with coverage");
   }
 
-  if (!coverageExists) {
+  if (testsFailed && expectFailure) {
+    messages.push("Tests failed as expected");
+  } else if (testsFailed && !expectFailure) {
+    violations.push("Tests failed");
     return {
       check: "coverage",
       args,
       passed: false,
       messages,
-      violations: ["Coverage must be run first"],
-      summary: "Coverage not run",
+      violations,
+      summary: "Tests failed",
       values: { lineCoverage: 0, newLineCoverage: 0 },
     };
-  }
-  messages.push("Coverage data loaded");
-
-  if (expectFailure) {
-    let testsFailed = false;
-    try {
-      inspectors.coverage.runTestsWithCoverage();
-    } catch {
-      testsFailed = true;
-    }
-
-    if (!testsFailed) {
-      return {
-        check: "coverage",
-        args,
-        passed: false,
-        messages,
-        violations: ["Tests were expected to fail but all passed"],
-        summary: "Expected failure but tests passed",
-        values: { lineCoverage: 0, newLineCoverage: 0 },
-      };
-    }
-
-    messages.push("Tests failed as expected");
+  } else if (!testsFailed && expectFailure) {
+    violations.push("Tests were expected to fail but all passed");
     return {
       check: "coverage",
       args,
-      passed: true,
+      passed: false,
       messages,
       violations,
-      summary: "Expected test failures confirmed",
+      summary: "Expected failure but tests passed",
       values: { lineCoverage: 0, newLineCoverage: 0 },
     };
   }
-
-  inspectors.coverage.runTestsWithCoverage();
-  messages.push("Tests run with coverage");
 
   let lineCoverage = 0;
   let newLineCoverage = 0;

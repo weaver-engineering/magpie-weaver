@@ -3,20 +3,20 @@ import { fn, requiredArgs } from "@magpieweaver/gate-checks/src/checks/coverage.
 import type { CoverageInspector, GitInspector, Inspectors } from "@magpieweaver/gate-checks/dist/types.js";
 
 function createMockInspectors(
-  coverageExists: boolean,
   testsPass: boolean,
   lineCoverage: number,
   newLineCoverage: number,
+  coverageDataExists: boolean = true,
 ): Inspectors {
   return {
     git: {} as GitInspector,
     coverage: {
       getCoverage: vi.fn().mockImplementation(async () => {
-        if (!coverageExists) throw new Error("No coverage data");
+        if (!coverageDataExists) throw new Error("No coverage data");
         return lineCoverage;
       }),
       getNewLineCoverage: vi.fn().mockImplementation(async () => {
-        if (!coverageExists) throw new Error("No coverage data");
+        if (!coverageDataExists) throw new Error("No coverage data");
         return newLineCoverage;
       }),
       runTestsWithCoverage: vi.fn().mockImplementation(() => {
@@ -28,8 +28,8 @@ function createMockInspectors(
 
 describe("coverage", () => {
   describe("§3.10.1 Coverage Thresholds Met", () => {
-    it("returns passed=true when both thresholds met", async () => {
-      const inspectors = createMockInspectors(true, true, 85, 95);
+    it("returns passed=true when both thresholds met and tests pass", async () => {
+      const inspectors = createMockInspectors(true, 85, 95);
       const result = await fn(inspectors, { "expect-failure": false });
       expect(result.passed).toBe(true);
       expect(result.violations).toHaveLength(0);
@@ -40,7 +40,7 @@ describe("coverage", () => {
 
   describe("§3.10.2 New Line Coverage Below Threshold", () => {
     it("returns passed=false when new line coverage <= 90%", async () => {
-      const inspectors = createMockInspectors(true, true, 85, 85);
+      const inspectors = createMockInspectors(true, 85, 85);
       const result = await fn(inspectors, { "expect-failure": false });
       expect(result.passed).toBe(false);
       expect(result.violations[0]).toContain("below threshold");
@@ -50,7 +50,7 @@ describe("coverage", () => {
 
   describe("§3.10.3 Line Coverage Below Threshold", () => {
     it("returns passed=false when line coverage <= 80%", async () => {
-      const inspectors = createMockInspectors(true, true, 75, 95);
+      const inspectors = createMockInspectors(true, 75, 95);
       const result = await fn(inspectors, { "expect-failure": false });
       expect(result.passed).toBe(false);
       expect(result.violations[0]).toContain("Line coverage");
@@ -58,7 +58,7 @@ describe("coverage", () => {
     });
 
     it("reports both violations when both thresholds missed", async () => {
-      const inspectors = createMockInspectors(true, true, 70, 80);
+      const inspectors = createMockInspectors(true, 70, 80);
       const result = await fn(inspectors, { "expect-failure": false });
       expect(result.passed).toBe(false);
       expect(result.violations).toHaveLength(2);
@@ -66,29 +66,47 @@ describe("coverage", () => {
   });
 
   describe("§3.10.4 Expect Failure With Failing Tests", () => {
-    it("returns passed=true when --expect-failure and tests fail", async () => {
-      const inspectors = createMockInspectors(true, false, 0, 0);
+    it("returns passed=false when --expect-failure, tests fail, but coverage below threshold", async () => {
+      const inspectors = createMockInspectors(false, 0, 0);
+      const result = await fn(inspectors, { "expect-failure": true });
+      expect(result.passed).toBe(false);
+      expect(result.violations[0]).toContain("below threshold");
+    });
+
+    it("returns passed=true when --expect-failure, tests fail, and coverage meets thresholds", async () => {
+      const inspectors = createMockInspectors(false, 85, 95);
       const result = await fn(inspectors, { "expect-failure": true });
       expect(result.passed).toBe(true);
       expect(result.violations).toHaveLength(0);
+      expect(result.values.lineCoverage).toBe(85);
+      expect(result.values.newLineCoverage).toBe(95);
     });
   });
 
   describe("§3.10.5 Expect Failure With Passing Tests", () => {
     it("returns passed=false when --expect-failure but tests pass", async () => {
-      const inspectors = createMockInspectors(true, true, 0, 0);
+      const inspectors = createMockInspectors(true, 85, 95);
       const result = await fn(inspectors, { "expect-failure": true });
       expect(result.passed).toBe(false);
       expect(result.violations[0]).toContain("expected to fail");
     });
   });
 
-  describe("§3.10.6 Coverage Not Run", () => {
-    it("returns passed=false when coverage data does not exist", async () => {
-      const inspectors = createMockInspectors(false, true, 0, 0);
+  describe("§3.10.6 Test Failure Without Expect Failure", () => {
+    it("returns passed=false when tests fail and --expect-failure is not set", async () => {
+      const inspectors = createMockInspectors(false, 85, 95);
       const result = await fn(inspectors, { "expect-failure": false });
       expect(result.passed).toBe(false);
-      expect(result.violations).toContain("Coverage must be run first");
+      expect(result.violations[0]).toContain("Tests failed");
+    });
+  });
+
+  describe("§3.10.7 Coverage Data Missing After Run", () => {
+    it("reports violations when coverage data is unavailable after running tests", async () => {
+      const inspectors = createMockInspectors(true, 0, 0, false);
+      const result = await fn(inspectors, { "expect-failure": false });
+      expect(result.passed).toBe(false);
+      expect(result.violations[0]).toContain("Could not read coverage data");
     });
   });
 
