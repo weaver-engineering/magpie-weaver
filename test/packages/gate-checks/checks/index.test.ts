@@ -18,8 +18,8 @@ describe("checks/index catalog", () => {
     "existing-tests-pass": ["pr-base-sha", "pr-head-sha"],
     "new-tests-fail": ["pr-base-sha", "pr-head-sha"],
     "coverage": ["expect-failure"],
-    "spec-gate": [],
     "test-gate": [],
+    "build-gate": [],
   };
 
   describe("all 12 checks are registered", () => {

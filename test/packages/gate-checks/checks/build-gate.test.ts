@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fn, requiredArgs } from "@magpieweaver/gate-checks/src/checks/spec-gate.js";
+import { fn, requiredArgs } from "@magpieweaver/gate-checks/src/checks/build-gate.js";
 import type { GitInspector } from "@magpieweaver/gate-checks/dist/git-interface.js";
 import type { CoverageInspector } from "@magpieweaver/gate-checks/dist/coverage-interface.js";
 import type { Inspectors } from "@magpieweaver/gate-checks/dist/types.js";
@@ -25,24 +25,29 @@ function createMockInspectors(): Inspectors {
   };
 }
 
-describe("spec-gate", () => {
+describe("build-gate", () => {
   let inspectors: Inspectors;
 
   beforeEach(() => {
     inspectors = createMockInspectors();
   });
 
-  describe("§4.13 spec-gate — Valid spec gate", () => {
-    it("returns passed=true for exactly 1 commit with valid spec commit", async () => {
+  describe("Valid test gate", () => {
+    it("returns passed=true for exactly 2 commits with valid spec and test commits", async () => {
       const mockMergeBase = inspectors.git.mergeBase as ReturnType<typeof vi.fn>;
       mockMergeBase.mockResolvedValue("merge-base-sha");
 
       const mockRevList = inspectors.git.revList as ReturnType<typeof vi.fn>;
-      mockRevList.mockResolvedValueOnce(["spec-commit-sha"]);
+      mockRevList.mockResolvedValueOnce(["test-commit-sha", "spec-commit-sha"]);
       mockRevList.mockResolvedValueOnce([]);
 
       const mockCommitMessages = inspectors.git.commitMessages as ReturnType<typeof vi.fn>;
-      mockCommitMessages.mockResolvedValue(["MAG-30 Add spec\n\nBody"]);
+      mockCommitMessages.mockImplementation((ref: string) => {
+        if (ref === "spec-commit-sha") {
+          return Promise.resolve(["MAG-30 Add spec\n\nBody"]);
+        }
+        return Promise.resolve(["MAG-30 Add tests\n\nTest body"]);
+      });
 
       const mockLsTree = inspectors.git.lsTree as ReturnType<typeof vi.fn>;
       mockLsTree.mockResolvedValue([
@@ -51,9 +56,25 @@ describe("spec-gate", () => {
       ]);
 
       const mockDiffTree = inspectors.git.diffTree as ReturnType<typeof vi.fn>;
-      mockDiffTree.mockResolvedValue([
-        "docs/tasks/task-MAG-30/task-MAG-30-04-spec.md",
-      ]);
+      mockDiffTree.mockImplementation((ref: string) => {
+        if (ref === "test-commit-sha") {
+          return Promise.resolve(["test/new.test.ts"]);
+        }
+        return Promise.resolve([
+          "docs/tasks/task-MAG-30/task-MAG-30-04-spec.md",
+        ]);
+      });
+
+      const mockAdded = inspectors.git.added as ReturnType<typeof vi.fn>;
+      mockAdded.mockImplementation((ref: string) => {
+        if (ref === "test-commit-sha") {
+          return Promise.resolve(["test/new.test.ts"]);
+        }
+        return Promise.resolve([]);
+      });
+
+      const mockModified = inspectors.git.modified as ReturnType<typeof vi.fn>;
+      mockModified.mockResolvedValue([]);
 
       const result = await fn(inspectors, {
         "destination-branch": "main",
@@ -61,10 +82,8 @@ describe("spec-gate", () => {
 
       expect(result.passed).toBe(true);
       expect(result.violations).toHaveLength(0);
-      expect(result.check).toBe("spec-gate");
-      expect(result.values.commit).toBe("spec-commit-sha");
+      expect(result.check).toBe("build-gate");
       expect(mockMergeBase).toHaveBeenCalledWith("HEAD", "main");
-      expect(inspectors.git.currentBranch).toHaveBeenCalled();
     });
 
     it("defaults destination-branch to main when not provided", async () => {
@@ -72,11 +91,16 @@ describe("spec-gate", () => {
       mockMergeBase.mockResolvedValue("merge-base-sha");
 
       const mockRevList = inspectors.git.revList as ReturnType<typeof vi.fn>;
-      mockRevList.mockResolvedValueOnce(["sha"]);
+      mockRevList.mockResolvedValueOnce(["test-sha", "spec-sha"]);
       mockRevList.mockResolvedValueOnce([]);
 
       const mockCommitMessages = inspectors.git.commitMessages as ReturnType<typeof vi.fn>;
-      mockCommitMessages.mockResolvedValue(["MAG-30 Add spec\n\nBody"]);
+      mockCommitMessages.mockImplementation((ref: string) => {
+        if (ref === "spec-sha") {
+          return Promise.resolve(["MAG-30 Add spec\n\nBody"]);
+        }
+        return Promise.resolve(["MAG-30 Add tests\n\nTest body"]);
+      });
 
       const mockLsTree = inspectors.git.lsTree as ReturnType<typeof vi.fn>;
       mockLsTree.mockResolvedValue([
@@ -85,9 +109,25 @@ describe("spec-gate", () => {
       ]);
 
       const mockDiffTree = inspectors.git.diffTree as ReturnType<typeof vi.fn>;
-      mockDiffTree.mockResolvedValue([
-        "docs/tasks/task-MAG-30/task-MAG-30-04-spec.md",
-      ]);
+      mockDiffTree.mockImplementation((ref: string) => {
+        if (ref === "test-sha") {
+          return Promise.resolve(["test/new.test.ts"]);
+        }
+        return Promise.resolve([
+          "docs/tasks/task-MAG-30/task-MAG-30-04-spec.md",
+        ]);
+      });
+
+      const mockAdded = inspectors.git.added as ReturnType<typeof vi.fn>;
+      mockAdded.mockImplementation((ref: string) => {
+        if (ref === "test-sha") {
+          return Promise.resolve(["test/new.test.ts"]);
+        }
+        return Promise.resolve([]);
+      });
+
+      const mockModified = inspectors.git.modified as ReturnType<typeof vi.fn>;
+      mockModified.mockResolvedValue([]);
 
       const result = await fn(inspectors, {});
 
@@ -104,11 +144,11 @@ describe("spec-gate", () => {
 
       expect(result.passed).toBe(false);
       expect(result.violations.length).toBeGreaterThan(0);
-      expect(result.check).toBe("spec-gate");
+      expect(result.check).toBe("build-gate");
     });
   });
 
-  describe("Not exactly 1 commit", () => {
+  describe("Not exactly 2 commits", () => {
     it("returns passed=false when no commits between HEAD and merge base", async () => {
       const mockMergeBase = inspectors.git.mergeBase as ReturnType<typeof vi.fn>;
       mockMergeBase.mockResolvedValue("merge-base-sha");
@@ -119,22 +159,22 @@ describe("spec-gate", () => {
       const result = await fn(inspectors, { "destination-branch": "main" });
 
       expect(result.passed).toBe(false);
-      expect(result.violations[0]).toContain("Expected exactly 1 commit");
+      expect(result.violations[0]).toContain("Expected exactly 2 commits");
       expect(result.violations[0]).toContain("found 0");
     });
 
-    it("returns passed=false when multiple commits between HEAD and merge base", async () => {
+    it("returns passed=false when 1 commit between HEAD and merge base", async () => {
       const mockMergeBase = inspectors.git.mergeBase as ReturnType<typeof vi.fn>;
       mockMergeBase.mockResolvedValue("merge-base-sha");
 
       const mockRevList = inspectors.git.revList as ReturnType<typeof vi.fn>;
-      mockRevList.mockResolvedValue(["a", "b", "c"]);
+      mockRevList.mockResolvedValue(["only-one"]);
 
       const result = await fn(inspectors, { "destination-branch": "main" });
 
       expect(result.passed).toBe(false);
-      expect(result.violations[0]).toContain("Expected exactly 1 commit");
-      expect(result.violations[0]).toContain("found 3");
+      expect(result.violations[0]).toContain("Expected exactly 2 commits");
+      expect(result.violations[0]).toContain("found 1");
     });
   });
 
@@ -144,7 +184,7 @@ describe("spec-gate", () => {
       mockMergeBase.mockResolvedValue("merge-base-sha");
 
       const mockRevList = inspectors.git.revList as ReturnType<typeof vi.fn>;
-      mockRevList.mockResolvedValueOnce(["spec-commit-sha"]);
+      mockRevList.mockResolvedValueOnce(["commit-a", "commit-b"]);
       mockRevList.mockResolvedValueOnce(["dest-commit-1"]);
 
       const result = await fn(inspectors, { "destination-branch": "main" });
@@ -154,13 +194,13 @@ describe("spec-gate", () => {
     });
   });
 
-  describe("Spec validation fail", () => {
-    it("returns passed=false when spec validation fails", async () => {
+  describe("Spec validation fails", () => {
+    it("returns passed=false when spec commit validation fails", async () => {
       const mockMergeBase = inspectors.git.mergeBase as ReturnType<typeof vi.fn>;
       mockMergeBase.mockResolvedValue("merge-base-sha");
 
       const mockRevList = inspectors.git.revList as ReturnType<typeof vi.fn>;
-      mockRevList.mockResolvedValueOnce(["spec-commit-sha"]);
+      mockRevList.mockResolvedValueOnce(["test-sha", "spec-sha"]);
       mockRevList.mockResolvedValueOnce([]);
 
       const mockCommitMessages = inspectors.git.commitMessages as ReturnType<typeof vi.fn>;
@@ -170,7 +210,46 @@ describe("spec-gate", () => {
 
       expect(result.passed).toBe(false);
       expect(result.violations.length).toBeGreaterThan(0);
-      expect(result.check).toBe("spec-gate");
+      expect(result.check).toBe("build-gate");
+    });
+  });
+
+  describe("Test validation fails", () => {
+    it("returns passed=false when test commit validation fails", async () => {
+      const mockMergeBase = inspectors.git.mergeBase as ReturnType<typeof vi.fn>;
+      mockMergeBase.mockResolvedValue("merge-base-sha");
+
+      const mockRevList = inspectors.git.revList as ReturnType<typeof vi.fn>;
+      mockRevList.mockResolvedValueOnce(["test-sha", "spec-sha"]);
+      mockRevList.mockResolvedValueOnce([]);
+
+      const mockCommitMessages = inspectors.git.commitMessages as ReturnType<typeof vi.fn>;
+      mockCommitMessages
+        .mockResolvedValueOnce(["MAG-30 Add spec\n\nBody"])
+        .mockResolvedValueOnce(["MAG-30 Bad test\n\nBody"]);
+
+      const mockLsTree = inspectors.git.lsTree as ReturnType<typeof vi.fn>;
+      mockLsTree.mockResolvedValue([
+        "docs/tasks/task-MAG-30/task-MAG-30.md",
+        "docs/tasks/task-MAG-30/task-MAG-30-04-spec.md",
+      ]);
+
+      const mockDiffTree = inspectors.git.diffTree as ReturnType<typeof vi.fn>;
+      mockDiffTree.mockResolvedValue([
+        "docs/tasks/task-MAG-30/task-MAG-30-04-spec.md",
+      ]);
+
+      const mockAdded = inspectors.git.added as ReturnType<typeof vi.fn>;
+      mockAdded.mockResolvedValue([]);
+
+      const mockModified = inspectors.git.modified as ReturnType<typeof vi.fn>;
+      mockModified.mockResolvedValue([]);
+
+      const result = await fn(inspectors, { "destination-branch": "main" });
+
+      expect(result.passed).toBe(false);
+      expect(result.violations.length).toBeGreaterThan(0);
+      expect(result.check).toBe("build-gate");
     });
   });
 

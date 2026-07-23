@@ -1,7 +1,6 @@
 import { type GateCheckResult, type GateCheckFn } from "../types.js";
 import { fn as branchRef } from "./branch-ref.js";
 import { fn as validateSpecCommit } from "./validate-spec-commit.js";
-import { fn as validateTestCommit } from "./validate-test-commit.js";
 
 export const requiredArgs: string[] = [];
 
@@ -41,9 +40,9 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
     throw new Error(`Invalid argument: --destination-branch="${destinationBranch}" could not be resolved`);
   }
 
-  if (commits.length !== 2) {
+  if (commits.length !== 1) {
     violations.push(
-      `Expected exactly 2 commits between HEAD and ${destinationBranch}, found ${commits.length}`,
+      `Expected exactly 1 commit between HEAD and ${destinationBranch}, found ${commits.length}`,
     );
     return {
       check: "test-gate",
@@ -55,7 +54,7 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
       values: { mergeBase, commits },
     };
   }
-  messages.push(`2 commits between HEAD and ${destinationBranch}`);
+  messages.push(`1 commit between HEAD and ${destinationBranch}`);
 
   let destCommits: string[];
   try {
@@ -79,34 +78,17 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
   messages.push(`Destination branch "${destinationBranch}" has not advanced`);
 
   const specResult = await validateSpecCommit(inspectors, {
-    "spec-commit-ref": commits[1],
-    ref,
-  });
-
-  if (!specResult.passed) {
-    return {
-      check: "test-gate",
-      args,
-      passed: false,
-      messages: [...messages, ...specResult.messages],
-      violations: specResult.violations,
-      summary: specResult.summary,
-      values: { commit: commits[1], ...specResult.values },
-    };
-  }
-
-  const testResult = await validateTestCommit(inspectors, {
-    "test-commit-ref": commits[0],
+    "spec-commit-ref": commits[0],
     ref,
   });
 
   return {
     check: "test-gate",
     args,
-    passed: testResult.passed,
-    messages: [...messages, ...specResult.messages, ...testResult.messages],
-    violations: testResult.violations,
-    summary: testResult.passed ? "Test gate passed" : testResult.summary,
-    values: { commit: commits[0], specCommit: commits[1], ...specResult.values, ...testResult.values },
+    passed: specResult.passed,
+    messages: [...messages, ...specResult.messages],
+    violations: specResult.violations,
+    summary: specResult.passed ? "Test gate passed" : specResult.summary,
+    values: { commit: commits[0], ...specResult.values },
   };
 };
