@@ -6,8 +6,13 @@ export const requiredArgs: string[] = [];
 
 export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult> => {
   const destinationBranch = (args["destination-branch"] as string) || "main";
+  const explicitRef = args["ref"] as string | undefined;
   const messages: string[] = [];
   const violations: string[] = [];
+
+  if (explicitRef) {
+    messages.push(`Using explicit --ref: "${explicitRef}"`);
+  }
 
   const branchResult = await branchRef(inspectors, args);
   if (!branchResult.passed) {
@@ -21,7 +26,7 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
       values: {},
     };
   }
-  const ref = branchResult.values.ref as string;
+  const ref = explicitRef ?? (branchResult.values.ref as string);
   messages.push(...branchResult.messages);
   messages.push("Branch validated via branch-ref");
 
