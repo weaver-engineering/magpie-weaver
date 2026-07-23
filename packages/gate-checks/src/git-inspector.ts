@@ -166,6 +166,15 @@ export class GitInspectorImpl implements GitInspector {
     return (await this.git.raw(["rev-parse", "--abbrev-ref", "HEAD"])).trim();
   }
 
+  async workingTreeChanges(path?: string): Promise<string[]> {
+    const args = ["status", "--porcelain"];
+    if (path) args.push("--", path);
+    const output = await this.git.raw(args);
+    return this.splitLines(output)
+      .map((line) => line.slice(3).trim())
+      .filter(Boolean);
+  }
+
   /**
    * Run git diff with a specific --diff-filter to list files of a change type.
    *

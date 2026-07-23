@@ -95,4 +95,13 @@ export interface GitInspector {
    * @returns The name of the current branch
    */
   currentBranch(): Promise<string>;
+
+  /**
+   * List files with uncommitted changes in the working tree.
+   * If path is given only list files with that prefix.
+   *
+   * @param path If given only list files with this prefix
+   * @returns A list of paths with uncommitted changes
+   */
+  workingTreeChanges(path?: string): Promise<string[]>;
 }

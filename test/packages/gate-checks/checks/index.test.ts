@@ -15,7 +15,7 @@ describe("checks/index catalog", () => {
     "validate-test-commit": [],
     "validate-build-commit": [],
     "validate-task-commit": [],
-    "existing-tests-pass": ["pr-base-sha", "pr-head-sha"],
+    "existing-tests-pass": [],
     "new-tests-fail": ["pr-base-sha", "pr-head-sha"],
     "coverage": ["expect-failure"],
     "test-gate": [],
