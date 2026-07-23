@@ -20,26 +20,8 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
     messages.push("Tests failed as expected");
   } else if (testsFailed && !expectFailure) {
     violations.push("Tests failed");
-    return {
-      check: "coverage",
-      args,
-      passed: false,
-      messages,
-      violations,
-      summary: "Tests failed",
-      values: { lineCoverage: 0, newLineCoverage: 0 },
-    };
   } else if (!testsFailed && expectFailure) {
     violations.push("Tests were expected to fail but all passed");
-    return {
-      check: "coverage",
-      args,
-      passed: false,
-      messages,
-      violations,
-      summary: "Expected failure but tests passed",
-      values: { lineCoverage: 0, newLineCoverage: 0 },
-    };
   }
 
   let lineCoverage = 0;
