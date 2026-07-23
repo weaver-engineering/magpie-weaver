@@ -20,10 +20,13 @@ export class CoverageInspectorImpl implements CoverageInspector {
    * @param options.coverageDir Path to the coverage output directory (defaults to `<cwd>/coverage`)
    * @param options.gitBaseRef Git base ref for diff comparison (defaults to "origin/main")
    */
-  constructor(options?: { cwd?: string; coverageDir?: string; gitBaseRef?: string }) {
+  private json: boolean;
+
+  constructor(options?: { cwd?: string; coverageDir?: string; gitBaseRef?: string; json?: boolean }) {
     this.cwd = options?.cwd ?? process.cwd();
     this.coverageDir = resolve(this.cwd, options?.coverageDir ?? "coverage");
     this.gitBaseRef = options?.gitBaseRef ?? "origin/main";
+    this.json = options?.json ?? false;
   }
 
   /**
@@ -32,23 +35,26 @@ export class CoverageInspectorImpl implements CoverageInspector {
    * Also outputs JSON test results to `coverage/test-results.json`.
    * If path is given, tests are filtered using `pnpm --filter <path>`.
    *
-   * @param path If given, only run tests at the given path
+   * @param path If given, only run tests for the package at the path
    */
   runTestsWithCoverage(path?: string): void {
-    const filterFlag = path ? ` --filter ${path}` : "";
+    const filterFlag = path ? ` --project ${path}` : "";
     const command = [
       "pnpm",
-      `test${filterFlag}`,
-      "--",
+      "exec",
+      "vitest",
+      "run",
       "--coverage",
       "--coverage.reporter=json-summary",
       "--coverage.reporter=lcov",
+      "--coverage.reportOnFailure",
       "--reporter=default",
       "--reporter=json",
-      `--outputFile.json=${resolve(this.coverageDir, "test-results.json")}`,
-    ].join("");
+      `--outputFile.json="${resolve(this.coverageDir, "test-results.json")}"`,
+      filterFlag,
+    ].filter(Boolean).join(" ");
 
-    execSync(command, { cwd: this.cwd, stdio: "inherit" });
+    execSync(this.json ? `${command} >/dev/null 2>&1` : command, { cwd: this.cwd, stdio: "inherit" });
   }
 
   /**

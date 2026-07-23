@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 import { catalog } from "./checks/index.js";
 import { CoverageInspectorImpl } from "./coverage-inspector.js";
 import { GitInspectorImpl } from "./git-inspector.js";
@@ -119,9 +121,10 @@ async function main(): Promise<void> {
     }
   }
 
+  const packageDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
   const inspectors = {
     git: new GitInspectorImpl(),
-    coverage: new CoverageInspectorImpl(),
+    coverage: new CoverageInspectorImpl({ cwd: packageDir, json }),
   };
 
   let result: GateCheckResult;
