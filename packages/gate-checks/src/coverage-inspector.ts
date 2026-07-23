@@ -2,7 +2,7 @@ import { exec, execSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
-import { type CoverageInspector } from "./coverage-interface.js";
+import { type CoverageInspector, type TestResults } from "./coverage-interface.js";
 
 const execAsync = promisify(exec);
 
@@ -29,6 +29,7 @@ export class CoverageInspectorImpl implements CoverageInspector {
   /**
    * Run tests with coverage using pnpm.
    * Tests are run via `pnpm test -- --coverage` with json-summary and lcov reporters.
+   * Also outputs JSON test results to `coverage/test-results.json`.
    * If path is given, tests are filtered using `pnpm --filter <path>`.
    *
    * @param path If given, only run tests at the given path
@@ -42,9 +43,44 @@ export class CoverageInspectorImpl implements CoverageInspector {
       "--coverage",
       "--coverage.reporter=json-summary",
       "--coverage.reporter=lcov",
+      "--reporter=default",
+      "--reporter=json",
+      `--outputFile.json=${resolve(this.coverageDir, "test-results.json")}`,
     ].join("");
 
     execSync(command, { cwd: this.cwd, stdio: "inherit" });
+  }
+
+  /**
+   * Read test results from the most recent test run.
+   *
+   * @returns TestResults with counts and failing test file paths
+   * @throws If test results file has not been generated yet
+   */
+  async getTestResults(): Promise<TestResults> {
+    const resultsPath = resolve(this.coverageDir, "test-results.json");
+    let content: string;
+    try {
+      content = await readFile(resultsPath, "utf-8");
+    } catch {
+      throw new Error(
+        `Test results not found at ${resultsPath}. Run runTestsWithCoverage() first.`,
+      );
+    }
+
+    const data = JSON.parse(content);
+    const failingTestFiles: string[] = [];
+    for (const result of data.testResults ?? []) {
+      if (result.status === "failed") {
+        failingTestFiles.push(result.name);
+      }
+    }
+
+    return {
+      numTotalTests: data.numTotalTests ?? 0,
+      numFailedTests: data.numFailedTests ?? 0,
+      failingTestFiles,
+    };
   }
 
   /**

@@ -46,48 +46,61 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
   }
   messages.push("No uncommitted test changes");
 
-  let testsFailed = false;
+  let result: GateCheckResult;
   try {
-    inspectors.coverage.runTestsWithCoverage();
-    messages.push("Tests run with coverage");
-  } catch {
-    testsFailed = true;
-    messages.push("Tests run with coverage");
-  }
+    const testResults = await inspectors.coverage.getTestResults();
+    messages.push(`Tests: ${testResults.numTotalTests} total, ${testResults.numFailedTests} failed`);
 
-  if (!testsFailed) {
-    return {
+    const unknownFailures = testResults.failingTestFiles.filter(
+      (f) => !newTestList.some((n) => f.endsWith(n)),
+    );
+
+    if (unknownFailures.length === 0) {
+      result = {
+        check: "existing-tests-pass",
+        args,
+        passed: true,
+        messages,
+        violations,
+        summary: testResults.numFailedTests === 0
+          ? "All tests pass"
+          : "Only new tests fail",
+        values: {
+          numTests: testResults.numTotalTests,
+          numTestFailures: testResults.numFailedTests,
+          failingTests: testResults.failingTestFiles,
+        },
+      };
+    } else {
+      for (const f of unknownFailures) {
+        violations.push(`Existing test fails: ${f}`);
+      }
+      result = {
+        check: "existing-tests-pass",
+        args,
+        passed: false,
+        messages,
+        violations,
+        summary: "Some existing tests fail",
+        values: {
+          numTests: testResults.numTotalTests,
+          numTestFailures: testResults.numFailedTests,
+          failingTests: testResults.failingTestFiles,
+        },
+      };
+    }
+  } catch {
+    violations.push("Could not read test results");
+    result = {
       check: "existing-tests-pass",
       args,
-      passed: true,
+      passed: false,
       messages,
       violations,
-      summary: "All tests pass",
+      summary: "Could not read test results",
       values: { numTests: 0, numTestFailures: 0, failingTests: [] },
     };
   }
 
-  if (newTestList.length > 0) {
-    messages.push(`${newTestList.length} new test(s) identified`);
-    return {
-      check: "existing-tests-pass",
-      args,
-      passed: true,
-      messages,
-      violations,
-      summary: "Only new tests fail",
-      values: { numTests: 0, numTestFailures: 0, failingTests: newTestList },
-    };
-  }
-
-  violations.push("Some existing tests fail");
-  return {
-    check: "existing-tests-pass",
-    args,
-    passed: false,
-    messages,
-    violations,
-    summary: "Some existing tests fail",
-    values: { numTests: 0, numTestFailures: 0, failingTests: [] },
-  };
+  return result;
 };
