@@ -17,7 +17,7 @@
     "test": "pnpm -r test",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "gate-check": "gate-checks"
+    "gate-check": "pnpm exec gate-checks"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
