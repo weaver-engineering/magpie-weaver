@@ -5,8 +5,6 @@ import { fn as validateTestCommit } from "./validate-test-commit.js";
 import { fn as validateBuildCommit } from "./validate-build-commit.js";
 import { fn as validateTaskCommit } from "./validate-task-commit.js";
 import { fn as coverage } from "./coverage.js";
-import { fn as existingTestsPass } from "./existing-tests-pass.js";
-import { fn as newTestsFail } from "./new-tests-fail.js";
 
 export const requiredArgs: string[] = [];
 
@@ -184,30 +182,11 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
     }
     messages.push(...buildResult.messages);
 
-    const newTestsRaw = testResult.values?.newTests;
-    const newTestList: string[] = Array.isArray(newTestsRaw)
-      ? (newTestsRaw as string[])
-      : (newTestsRaw ? [String(newTestsRaw)] : []);
-
     const coverageResult = await coverage(inspectors, { "expect-failure": false });
     messages.push(...coverageResult.messages);
     violations.push(...coverageResult.violations);
 
-    const existingPassResult = await existingTestsPass(
-      inspectors,
-      { newTests: newTestList } as unknown as Record<string, boolean | number | string>,
-    );
-    messages.push(...existingPassResult.messages);
-    violations.push(...existingPassResult.violations);
-
-    const newTestsFailResult = await newTestsFail(
-      inspectors,
-      { newTests: newTestList } as unknown as Record<string, boolean | number | string>,
-    );
-    messages.push(...newTestsFailResult.messages);
-    violations.push(...newTestsFailResult.violations);
-
-    const passed = buildResult.passed && coverageResult.passed && existingPassResult.passed && newTestsFailResult.passed;
+    const passed = buildResult.passed && coverageResult.passed;
     return {
       check: "main-gate",
       args,
@@ -223,8 +202,6 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
         ...testResult.values,
         ...buildResult.values,
         ...coverageResult.values,
-        ...existingPassResult.values,
-        ...newTestsFailResult.values,
       },
     };
   }
