@@ -1,0 +1,19 @@
+{
+  "name": "@magpieweaver/task-phases",
+  "description": "CLI to monitor and manage task phase transitions (spec -> test -> build -> deploy) for Magpie Weaver",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/cli.js",
+  "bin": {
+    "task": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && chmod +x dist/cli.js",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}
