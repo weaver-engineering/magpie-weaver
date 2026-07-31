@@ -3,14 +3,19 @@
  * detailed in §4.8). Branch create/checkout/push/rebase primitives — never
  * used to create ordinary work commits (§1.1).
  *
- * The read-only primitives (`fetch`, `currentBranch`, `branchExists`,
- * `headSha`) and the mutating primitives (`createBranch`, `checkout`,
- * `commitAll`, `push`) named by spec 01 are implemented here. Every other
- * method still throws — real implementations land with the chunk that owns
- * them (MAG-46-13).
+ * Spec 01 implements `fetch`, `currentBranch`, `branchExists`, `headSha`,
+ * `createBranch`, `checkout`, `commitAll`, `push`. Spec 05.01 implements
+ * `isDirty`, `hasCommitsBeyond`, `headCommitTitle`, `pullFastForward`,
+ * `deleteBranch`. The remaining methods (`mergeBase`, `isAncestor`,
+ * `rebase`) still throw — real implementations land with the chunk that
+ * owns them (MAG-46-13).
  */
 
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { simpleGit } from "simple-git";
+
+const execFileAsync = promisify(execFile);
 
 /** `deps/git.ts`'s own type — `types.ts` imports it, not the reverse. */
 export type RebaseOutcome =
@@ -71,8 +76,8 @@ export class RealGitTool implements GitTool {
    * current working directory, never relative to wherever `task-phases`
    * itself is installed (spec 01 §3.2.5).
    */
-  constructor(cwd?: string) {
-    this.git = simpleGit({ baseDir: cwd ?? process.cwd() });
+  constructor(private readonly cwd: string = process.cwd()) {
+    this.git = simpleGit({ baseDir: this.cwd });
   }
 
   /** `git fetch origin --prune` — keeps local remote-tracking refs fresh
@@ -113,16 +118,28 @@ export class RealGitTool implements GitTool {
     throw new Error("not implemented");
   }
 
-  hasCommitsBeyond(_branch: string, _parentBranch: string): Promise<boolean> {
-    throw new Error("not implemented");
+  /** `git rev-list --count <parentBranch>..<branch>` — commits unique to
+   * `branch` relative to `parentBranch`. Nonzero distinguishes
+   * `not-started` from `work-in-progress`/`ready?` (§2, §4.5). */
+  async hasCommitsBeyond(branch: string, parentBranch: string): Promise<boolean> {
+    const count = (
+      await this.git.raw(["rev-list", "--count", `${parentBranch}..${branch}`])
+    ).trim();
+    return Number(count) > 0;
   }
 
-  headCommitTitle(_branch: string): Promise<string> {
-    throw new Error("not implemented");
+  /** `git log -1 --format=%s <branch>` — HEAD's commit title (subject line
+   * only, no body), for the literal `WIP` substring check. */
+  async headCommitTitle(branch: string): Promise<string> {
+    return (await this.git.raw(["log", "-1", "--format=%s", branch])).trim();
   }
 
-  isDirty(): Promise<boolean> {
-    throw new Error("not implemented");
+  /** `git status --porcelain` — nonempty output means dirty. Covers both
+   * staged and unstaged changes, and untracked files. Local-checkout-only
+   * by nature — only meaningful for whatever's currently checked out. */
+  async isDirty(): Promise<boolean> {
+    const status = await this.git.raw(["status", "--porcelain"]);
+    return status.trim() !== "";
   }
 
   isAncestor(_ancestor: string, _descendant: string): Promise<boolean> {
@@ -165,15 +182,72 @@ export class RealGitTool implements GitTool {
     await this.git.raw(args);
   }
 
-  pullFastForward(_branch: string): Promise<void> {
-    throw new Error("not implemented");
+  /** The non-destructive half of `merged-pending-pull` (§3.3).
+   * If `branch` doesn't exist locally: `git branch <branch>
+   * origin/<branch>` (create only, no checkout — callers use `checkout()`
+   * separately if they want to switch to it).
+   * If it does exist: first verify `git merge-base --is-ancestor
+   * <branch> origin/<branch>` — a genuine fast-forward must actually be
+   * possible — then `git branch -f <branch> origin/<branch>`. The
+   * verification matters: blindly forcing the ref without checking
+   * direction would silently discard a local-only commit if this were
+   * ever called on a branch that had diverged. */
+  async pullFastForward(branch: string): Promise<void> {
+    const originRef = `origin/${branch}`;
+    if (!(await this.branchExists(branch))) {
+      // Create-only, no checkout.
+      await this.git.raw(["branch", branch, originRef]);
+      return;
+    }
+    // Verify a genuine fast-forward is possible before forcing the ref.
+    // `git merge-base --is-ancestor` exits 1 with *no* stderr output when
+    // `branch` is not an ancestor of `origin/<branch>`, and simple-git
+    // only treats a nonzero exit as a failure when it is accompanied by
+    // stderr — so the divergence case would silently resolve. Read the
+    // exit code via execFile directly (gh.ts's pattern) instead.
+    try {
+      await execFileAsync("git", ["merge-base", "--is-ancestor", branch, originRef], {
+        cwd: this.cwd,
+        encoding: "utf-8",
+      });
+    } catch (error) {
+      const err = error as { code?: number; stderr?: string | Buffer };
+      if (err.code === 1) {
+        throw new Error(
+          `Cannot fast-forward ${branch}: local branch has diverged from ${originRef}`,
+          { cause: error },
+        );
+      }
+      // Any other failure (e.g. unknown ref, exit 128) surfaces git's own
+      // stderr, or a generic message when git produced none.
+      const stderrText = (err.stderr ?? "").toString().trim();
+      throw new Error(
+        stderrText.length > 0
+          ? stderrText
+          : `git merge-base --is-ancestor ${branch} ${originRef} failed (exit code ${err.code ?? "unknown"})`,
+        { cause: error },
+      );
+    }
+    await this.git.raw(["branch", "-f", branch, originRef]);
   }
 
   rebase(_branch: string, _ontoRef: string): Promise<RebaseOutcome> {
     throw new Error("not implemented");
   }
 
-  deleteBranch(_branch: string): Promise<void> {
-    throw new Error("not implemented");
+  /** `git branch -D <branch>` + `git push origin --delete <branch>` —
+   * used only by final cleanup once the Main Gate PR merges (§3.6); never
+   * for any earlier transition. Either half already being absent is a
+   * no-op, not an error: the local half in particular is exactly the state
+   * a previously-interrupted cleanup leaves behind, so re-running must
+   * succeed. (Remote half existence is checked against the local
+   * remote-tracking ref, which `fetch()` keeps fresh per §1.1.) */
+  async deleteBranch(branch: string): Promise<void> {
+    if (await this.branchExists(branch)) {
+      await this.git.raw(["branch", "-D", branch]);
+    }
+    if (await this.branchExists(branch, { remote: true })) {
+      await this.git.raw(["push", "origin", "--delete", branch]);
+    }
   }
 }
