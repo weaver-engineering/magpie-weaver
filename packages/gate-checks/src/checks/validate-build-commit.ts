@@ -1,11 +1,12 @@
 import { type GateCheckResult, type GateCheckFn } from "../types.js";
-import { parseCommitMessage, isValidRef, commitTitleStartsWithRef, commitTitleContinuesBeyondRef } from "./helpers.js";
+import { parseCommitMessage, isValidRef, commitTitleStartsWithRef, commitTitleContinuesBeyondRef, isInterfaceFile } from "./helpers.js";
 
 export const requiredArgs: string[] = [];
 
 const allowedPaths = ["apps/", "packages/", "package.json", "pnpm-lock.yaml"];
 
 function isAllowedPath(filePath: string): boolean {
+  if (isInterfaceFile(filePath)) return false;
   return allowedPaths.some((p) => filePath === p || filePath.startsWith(p));
 }
 
@@ -77,7 +78,7 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
   if (outsideFiles.length > 0) {
     violations.push(`Changes outside allowed paths: ${outsideFiles.join(", ")}`);
   } else {
-    messages.push("Changes within allowed paths (apps/, packages/, package.json, pnpm-lock.yaml)");
+    messages.push("Changes within allowed paths (apps/, packages/ excl. *.interface.ts, package.json, pnpm-lock.yaml)");
   }
 
   const newFiles = await inspectors.git.added(commitRef);

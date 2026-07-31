@@ -131,6 +131,32 @@ describe("validate-test-commit", () => {
     });
   });
 
+  describe("§3.5.3b Interface Files Allowed Alongside test/", () => {
+    it("returns passed=true when a new packages/**/*.interface.ts is added alongside test/", async () => {
+      (inspectors.git.diffTree as ReturnType<typeof vi.fn>).mockResolvedValue([
+        "test/new.test.ts",
+        "packages/foo/src/bar.interface.ts",
+      ]);
+      (inspectors.git.added as ReturnType<typeof vi.fn>).mockResolvedValue([
+        "test/new.test.ts",
+        "packages/foo/src/bar.interface.ts",
+      ]);
+      const result = await fn(inspectors, { "test-commit-ref": "abc123" });
+      expect(result.passed).toBe(true);
+      expect(result.violations).toHaveLength(0);
+    });
+
+    it("returns passed=false when a non-interface packages/ file is changed", async () => {
+      (inspectors.git.diffTree as ReturnType<typeof vi.fn>).mockResolvedValue([
+        "test/new.test.ts",
+        "packages/foo/src/bar.ts",
+      ]);
+      const result = await fn(inspectors, { "test-commit-ref": "abc123" });
+      expect(result.passed).toBe(false);
+      expect(result.violations[0]).toContain("packages/foo/src/bar.ts");
+    });
+  });
+
   describe("§3.5.4 Changes Existing Tests", () => {
     it("returns passed=false when modifying an existing test file", async () => {
       (inspectors.git.modified as ReturnType<typeof vi.fn>).mockResolvedValue([

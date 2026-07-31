@@ -41,10 +41,7 @@ function setupCoverageMocks(inspectors: Inspectors): void {
 
 function setupBuildSuccess(inspectors: Inspectors): void {
   const mockMergeBase = inspectors.git.mergeBase as ReturnType<typeof vi.fn>;
-  mockMergeBase.mockImplementation((a: string) => {
-    if (a === "origin/build/MAG-30") return Promise.resolve("test-commit-sha");
-    return Promise.resolve("merge-base-sha");
-  });
+  mockMergeBase.mockResolvedValue("merge-base-sha");
 
   const mockRevList = inspectors.git.revList as ReturnType<typeof vi.fn>;
   mockRevList.mockResolvedValueOnce(["build-commit-sha", "test-commit-sha", "spec-commit-sha"]);
@@ -242,10 +239,7 @@ describe("main-gate", () => {
   describe("Spec commit validation fails", () => {
     it("returns passed=false when spec commit validation fails on build branch", async () => {
       const mockMergeBase = inspectors.git.mergeBase as ReturnType<typeof vi.fn>;
-      mockMergeBase.mockImplementation((a: string) => {
-        if (a === "origin/build/MAG-30") return Promise.resolve("test-commit-sha");
-        return Promise.resolve("merge-base-sha");
-      });
+      mockMergeBase.mockResolvedValue("merge-base-sha");
 
       const mockRevList = inspectors.git.revList as ReturnType<typeof vi.fn>;
       mockRevList.mockResolvedValueOnce(["build-sha", "test-sha", "spec-sha"]);
@@ -264,10 +258,7 @@ describe("main-gate", () => {
   describe("Test commit validation fails", () => {
     it("returns passed=false when test commit validation fails on build branch", async () => {
       const mockMergeBase = inspectors.git.mergeBase as ReturnType<typeof vi.fn>;
-      mockMergeBase.mockImplementation((a: string) => {
-        if (a === "origin/build/MAG-30") return Promise.resolve("test-sha");
-        return Promise.resolve("merge-base-sha");
-      });
+      mockMergeBase.mockResolvedValue("merge-base-sha");
 
       const mockRevList = inspectors.git.revList as ReturnType<typeof vi.fn>;
       mockRevList.mockResolvedValueOnce(["build-sha", "test-sha", "spec-sha"]);
@@ -300,42 +291,35 @@ describe("main-gate", () => {
     });
   });
 
-  describe("Remote branch merge base mismatch", () => {
-    it("returns passed=false when origin merge base is not the test commit", async () => {
-      const mockMergeBase = inspectors.git.mergeBase as ReturnType<typeof vi.fn>;
-      mockMergeBase.mockImplementation((a: string) => {
-        if (a === "origin/build/MAG-30") return Promise.resolve("wrong-sha");
-        return Promise.resolve("merge-base-sha");
-      });
+  describe("Re-verification after origin/build/{ref} already matches HEAD", () => {
+    it("still passes when local build/{ref} has already been pushed (origin === HEAD)", async () => {
+      // Regression test: previously this check computed
+      // mergeBase(origin/build/{ref}, HEAD) and required it to equal the
+      // test commit (commits[1]) — a comparison that only ever holds
+      // *before* the build commit reaches origin. Once build/{ref} is
+      // pushed (the normal state by the time anyone re-verifies an
+      // already-raised build->main PR), origin/build/{ref} === HEAD, so
+      // that merge-base trivially becomes HEAD itself (the build commit,
+      // commits[0]) — failing a structurally-sound history for a reason
+      // unrelated to its actual correctness. The check no longer performs
+      // this comparison at all; spec/test/build commits are identified
+      // purely by position in the already-ordered `commits` list.
+      setupBuildSuccess(inspectors);
+      setupCoverageMocks(inspectors);
 
-      const mockRevList = inspectors.git.revList as ReturnType<typeof vi.fn>;
-      mockRevList.mockResolvedValueOnce(["build-sha", "test-sha", "spec-sha"]);
-      mockRevList.mockResolvedValueOnce([]);
+      // mergeBase is never called with "origin/build/{ref}" post-fix —
+      // assert the mock only ever saw the two calls the check still makes
+      // (HEAD vs destination, per line 42).
+      const mockMergeBase = inspectors.git.mergeBase as ReturnType<typeof vi.fn>;
 
       const result = await fn(inspectors, { "destination-branch": "main" });
 
-      expect(result.passed).toBe(false);
-      expect(result.violations[0]).toContain("Merge base");
-      expect(result.violations[0]).toContain("second commit");
-    });
-  });
-
-  describe("Remote branch not found", () => {
-    it("returns passed=false when origin/build/{ref} cannot be resolved", async () => {
-      const mockMergeBase = inspectors.git.mergeBase as ReturnType<typeof vi.fn>;
-      mockMergeBase.mockImplementation((a: string) => {
-        if (a === "origin/build/MAG-30") throw new Error("not found");
-        return Promise.resolve("merge-base-sha");
-      });
-
-      const mockRevList = inspectors.git.revList as ReturnType<typeof vi.fn>;
-      mockRevList.mockResolvedValueOnce(["build-sha", "test-sha", "spec-sha"]);
-      mockRevList.mockResolvedValueOnce([]);
-
-      const result = await fn(inspectors, { "destination-branch": "main" });
-
-      expect(result.passed).toBe(false);
-      expect(result.violations[0]).toContain("could not be resolved");
+      expect(result.passed).toBe(true);
+      expect(result.violations).toHaveLength(0);
+      expect(mockMergeBase).not.toHaveBeenCalledWith(
+        expect.stringContaining("origin/build"),
+        expect.anything(),
+      );
     });
   });
 
