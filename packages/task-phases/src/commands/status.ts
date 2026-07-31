@@ -8,11 +8,14 @@ import type {
 
 /**
  * `pnpm task status ...` — see task-phasing-lld.md §3.9. Implements the
- * base case of the §3.2 derivation pipeline: `not-initialised`, when no
- * branch of any kind exists for the ref. Every other branch of the
- * pipeline (branch-exists / merge-status / open-PR derivation) still
- * throws `"not implemented"` — it lands with the chunks that own it
- * (MAG-46-06 onward).
+ * §3.2 derivation pipeline's branch-exists case (spec 06): a phase
+ * branch exists, so phase/state are derived from the branches themselves
+ * (`not-started` vs `work-in-progress`). The merge-status / open-PR /
+ * ready? branches of the pipeline (awaiting-pr / merged-pending-* /
+ * ready? resolution) are not consulted here — they land with the chunks
+ * that own them (MAG-46-06.01 / MAG-46-09/11/12/15). In particular, a
+ * task with a gate PR open does not yet defer `status`; that deferral is
+ * the subject of MAG-46-06.01.
  */
 
 /** The four phase-branch prefixes that make a ref "initialised". */
@@ -56,6 +59,57 @@ async function anyPhaseBranchExists(
   return false;
 }
 
+/** Derives the phase whose branch is currently authoritative for `ref`,
+ * alongside that phase's canonical branch, in the no-PR case (LLD §3.2's
+ * branch-exists chain). `test/{ref}` is the authority unless `spec/{ref}`
+ * was amended after the fork — the staleness check (§3.5) — in which case
+ * derivation falls back to `spec`, and `test/{ref}` is never consulted. */
+async function derivePhase(
+  tools: ExternalTools,
+  ref: string,
+): Promise<{ phase: Phase; canonicalBranch: string }> {
+  const testBranch = `test/${ref}`;
+  const specBranch = `spec/${ref}`;
+  const taskBranch = `task/${ref}`;
+
+  if (await tools.git.branchExists(testBranch)) {
+    // Staleness check (§3.5): `spec/{ref}` amended after `test/{ref}`
+    // forked makes spec authoritative — test is simply not consulted.
+    if (!(await tools.git.isAncestor(specBranch, testBranch))) {
+      return { phase: "spec", canonicalBranch: specBranch };
+    }
+    return { phase: "test", canonicalBranch: testBranch };
+  }
+  if (await tools.git.branchExists(specBranch)) {
+    return { phase: "spec", canonicalBranch: specBranch };
+  }
+  if (await tools.git.branchExists(taskBranch)) {
+    return { phase: "quick", canonicalBranch: taskBranch };
+  }
+  // A phase branch exists (anyPhaseBranchExists returned true) but none
+  // of the three derivable phases matches — the only remaining prefix is
+  // `build/{ref}`, whose states are all PR-driven (awaiting-pr /
+  // merged-pending-*) and land with later chunks (MAG-46-11/12/15).
+  throw new Error("not implemented");
+}
+
+/** Derives the no-PR branch-exists `PhaseState` (spec 06): no commits
+ * beyond `main` → `not-started`; commits exist → `work-in-progress`. The
+ * head commit's title is consulted for the WIP marker (§3.7) — a
+ * WIP-marked head holds derivation at `work-in-progress`, never `ready?`.
+ * `ready?`/`ready`/`blocked` resolution itself is MAG-46-09's scope, so
+ * both WIP-marked and plain heads resolve to `work-in-progress` here. */
+async function deriveState(
+  tools: ExternalTools,
+  canonicalBranch: string,
+): Promise<TaskState> {
+  if (!(await tools.git.hasCommitsBeyond(canonicalBranch, "main"))) {
+    return "not-started";
+  }
+  await tools.git.headCommitTitle(canonicalBranch);
+  return "work-in-progress";
+}
+
 export async function status(
   tools: ExternalTools,
   args: Record<string, boolean | number | string | string[]>,
@@ -76,9 +130,33 @@ export async function status(
   }
 
   if (await anyPhaseBranchExists(tools, ref)) {
-    // A phase branch exists — the rest of the §3.2 derivation pipeline is
-    // not implemented yet.
-    throw new Error("not implemented");
+    // A phase branch exists — derive phase and state from the branches
+    // themselves (spec 06). The merge-status / open-PR / ready? branches
+    // of the §3.2 pipeline are out of scope for this chunk (MAG-46-06.01
+    // / MAG-46-09/11/12/15).
+    const { phase, canonicalBranch } = await derivePhase(tools, ref);
+    const state = await deriveState(tools, canonicalBranch);
+
+    const taskStatus: TaskStatus = {
+      ref,
+      phase,
+      canonicalBranch,
+      currentBranch,
+      branchMismatch: currentBranch !== canonicalBranch,
+      state,
+    };
+
+    return {
+      success: true,
+      messages: [
+        `Current branch \`${currentBranch}\` - ref: ${ref}`,
+        stateLine(ref, phase, state),
+      ],
+      taskStatus,
+      checked: false,
+      checkRefused: false,
+      fixed: false,
+    };
   }
 
   return notInitialisedResult(ref, currentBranch);
