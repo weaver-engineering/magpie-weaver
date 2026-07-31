@@ -18,23 +18,67 @@ permission:
     "git remote*": allow
     "git fetch*": allow
     "git switch*": allow
+    "git checkout*": allow
     "git log*": allow
     "git diff*": allow
     "git merge-base*": allow
     "git rebase*": allow
+    "git cherry-pick*": allow
+    "git init*": allow
+    "git config*": allow
+    "git check-ignore*": allow
     "git add*": allow
     "git commit*": allow
     "git push*": allow
+    "git ls-files*": allow
+    "git ls-remote*": allow
+    "git clone*": allow
+    "git show*": allow
+    "git stash*": allow
+    "git tag*": allow
+    "git rev-list*": allow
+    "git ls-tree*": allow
     "gh pr create*": allow
     "gh pr list*": allow
+    "gh pr view*": allow
+    "gh pr diff*": allow
+    "gh pr checks*": allow
+    "gh run list*": allow
+    "gh pr edit*": allow
+    "gh pr close*": allow
+    "gh pr comment*": allow
+    "gh --version*": allow
+    "gh config get*": allow
+    "gh auth status*": allow
+    "gh api user*": allow
+    "gh repo list*": allow
+    "gh repo view*": allow
+    "gh api repos/weaver-engineering/sandbox-task-phases-DO-NOT-DELETE*": allow
     "pnpm gate-check*": allow
     "pnpm test*": allow
+    "pnpm --filter*": allow
+    "pnpm install*": allow
+    "pnpm exec eslint*": allow
+    "pnpm exec vitest*": allow
+    "sed -n*": allow
+    "python3 -*": allow
+    "rm -rf*": allow
+    "node*": allow
+    "git reset --hard*": allow
+    "perl -pi*": allow
     "head*": allow
     "tail*": allow
     "grep*": allow
     "wc*": allow
     "cat*": allow
     "echo*": allow
+    "find*": allow
+    "true*": allow
+    "date*": allow
+    "sleep*": allow
+    "base64*": allow
+    "ls*": allow
+    "mkdir*": allow
 ---
 
 # `build-implementer` — Standing Instructions
@@ -72,14 +116,39 @@ git switch -c build/{ref} origin/build/{ref}
 git switch build/{ref}
 
 # 5. Confirm origin/build/{ref} is still your base. No output = OK.
-#    A failure here means a second Build Gate PR merged after you started
-#    (the test commit was amended and re-merged) — your work needs reordering.
+#    A failure here means the spec+test history you branched from has
+#    moved on — either a second Build Gate PR merged cleanly, or (if that
+#    PR is itself stuck/conflicting on GitHub) spec/{ref} was amended and
+#    test/{ref} rebased forward without origin/build/{ref} ever advancing.
+#    Either way your work needs reordering onto the current source of
+#    truth — never resolve this with a plain `git rebase`.
 git merge-base --is-ancestor origin/build/{ref} build/{ref} && echo OK
 
-# 6. Only if step 5 failed — rebase your build commit on top of the fresh merge:
-git rebase origin/build/{ref}
-#    If this reports a conflict, STOP. Do not resolve it. Report `rebase-required` (§6).
-#    If you have more than one commit of your own, STOP. Squash first (§5), then retry.
+# 6. Only if step 5 failed — transplant your own commit(s) onto the
+#    current spec+test tip. Do NOT run a plain `git rebase <upstream>`:
+#    your build/{ref} still contains the OLD spec/test commits in its own
+#    history, and a plain rebase replays ALL of them (old spec, old test,
+#    then yours) onto the new base — producing duplicate/conflicting
+#    spec and test commits, not a clean 3-commit history.
+#
+#    First confirm how many commits are your own (should be exactly 1 —
+#    squash first, per §5, if not):
+git log --oneline origin/build/{ref}..build/{ref}
+#
+#    Then transplant just that commit onto whichever branch actually has
+#    the current spec+test — origin/build/{ref} if the newer Build Gate
+#    PR merged cleanly, or test/{ref} directly if that PR is itself
+#    stuck/conflicting (it will become moot once you push):
+git rebase --onto <origin/build/{ref}-or-test/{ref}> HEAD~1
+#    Because your own commit(s) never touch test/** or the spec doc, this
+#    transplant should apply with no git-level conflict. If the tests now
+#    fail against your existing implementation, that's ordinary working
+#    information — update your implementation to satisfy them (§4), same
+#    as any other failing test.
+#    If the transplant itself DOES report a git conflict (meaning one of
+#    your own commits touched a file the new spec/test also changed —
+#    shouldn't happen given §3's exclusions, but if it does), STOP. Do
+#    not resolve it. Report `rebase-required` (§6).
 
 # 7. Confirm your own commit count beyond origin/build/{ref} — 0 on a fresh
 #    Begin, 1 once you've committed.
@@ -202,6 +271,11 @@ implemented:
 ```bash
 gh pr create --base main --head build/{ref} --title "{ref}: <description>" --body "<what was implemented>"
 ```
+
+Before writing your final report, call the `session-info` tool and use the
+`sessionId` it returns. Never invent a session ID or copy the placeholder
+(`sess_abc123`) from the examples below — that is example formatting, not a
+real value.
 
 Then end with **exactly one** of the following as your final message.
 Never end silently, and never invent a sixth outcome.

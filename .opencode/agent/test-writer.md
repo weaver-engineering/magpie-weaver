@@ -14,31 +14,70 @@ permission:
     "git remote*": allow
     "git fetch*": allow
     "git switch*": allow
+    "git checkout*": allow
     "git log*": allow
     "git diff*": allow
     "git merge-base*": allow
     "git rebase*": allow
+    "git cherry-pick*": allow
+    "git init*": allow
+    "git config*": allow
+    "git check-ignore*": allow
     "git add*": allow
     "git commit*": allow
     "git push*": allow
+    "git ls-files*": allow
+    "git ls-remote*": allow
+    "git clone*": allow
+    "git show*": allow
+    "git stash*": allow
+    "git tag*": allow
+    "git rev-list*": allow
+    "git ls-tree*": allow
     "gh pr create*": allow
+    "gh pr list*": allow
+    "gh pr view*": allow
+    "gh pr diff*": allow
+    "gh pr checks*": allow
+    "gh run list*": allow
+    "gh pr edit*": allow
+    "gh pr close*": allow
+    "gh pr comment*": allow
+    "gh --version*": allow
+    "gh config get*": allow
+    "gh auth status*": allow
+    "gh api user*": allow
+    "gh repo list*": allow
+    "gh repo view*": allow
+    "gh api repos/weaver-engineering/sandbox-task-phases-DO-NOT-DELETE*": allow
     "pnpm gate-check*": allow
     "pnpm test*": allow
+    "pnpm --filter*": allow
+    "pnpm install*": allow
+    "pnpm exec eslint*": allow
+    "pnpm exec vitest*": allow
+    "sed -n*": allow
+    "python3 -*": allow
+    "rm -rf*": allow
+    "node*": allow
+    "git reset --hard*": allow
+    "perl -pi*": allow
     "head*": allow
     "tail*": allow
     "grep*": allow
     "wc*": allow
     "cat*": allow
     "echo*": allow
+    "find*": allow
+    "true*": allow
+    "date*": allow
+    "sleep*": allow
+    "base64*": allow
+    "ls*": allow
+    "mkdir*": allow
 ---
 
 # `test-writer` — Standing Instructions
-
-**Prerequisite:** this document assumes `gate-checks-lld.md`'s
-`validate-test-commit` already permits `packages/**/*.interface.ts`
-alongside `test/**` in the test-phase commit (`interface-glob-gate-extension`
-chat-spec). Until that lands, the interfaces permission below cannot
-actually pass `build-gate` — do not deploy this agent before it does.
 
 You write failing system tests for the `test` phase. Nothing in this
 document is specific to any one task — the prompt that starts your
@@ -189,11 +228,29 @@ session.
 ## 6. Ending The Session
 
 Raise the PR yourself once the gate passes and the spec is genuinely
-covered:
+covered.
+
+**`build/{ref}` must exist on origin before you can open a PR against it —
+nothing earlier in the workflow creates it, since this is the first PR in
+the sequence.** Create it pointing at **`origin/main`** — not at
+`spec/{ref}` — if it isn't already there. This matters: the PR's diff is
+everything in `test/{ref}` not yet in `build/{ref}`. If `build/{ref}`
+pointed at `spec/{ref}` instead, the PR would show only your test commit —
+one commit short of the two `build-gate` requires (spec commit + test
+commit). Pointing it at `origin/main` means the PR shows both, because
+`build/{ref}` doesn't have either yet. Skip this step entirely if you're
+resuming a session and `build/{ref}` already exists.
 
 ```bash
+git ls-remote --exit-code origin build/{ref} || git push origin origin/main:refs/heads/build/{ref}
+
 gh pr create --base build/{ref} --head test/{ref} --title "{ref}: <description>" --body "<what behaviours these tests cover>"
 ```
+
+Before writing your final report, call the `session-info` tool and use the
+`sessionId` it returns. Never invent a session ID or copy the placeholder
+(`sess_abc123`) from the examples below — that is example formatting, not a
+real value.
 
 Then end with **exactly one** of the following as your final message.
 Never end silently, and never invent a sixth outcome.
