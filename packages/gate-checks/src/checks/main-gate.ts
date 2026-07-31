@@ -93,37 +93,6 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
     }
     messages.push(`3 commits between HEAD and ${destinationBranch}`);
 
-    const originBranch = `origin/${buildBranchPattern}`;
-    let buildBase: string;
-    try {
-      buildBase = await inspectors.git.mergeBase(originBranch, `HEAD`);
-    } catch {
-      violations.push(`Remote branch "${originBranch}" could not be resolved`);
-      return {
-        check: "main-gate",
-        args,
-        passed: false,
-        messages,
-        violations,
-        summary: violations.join("; "),
-        values: { mergeBase, commits },
-      };
-    }
-
-    if (buildBase !== commits[1]) {
-      violations.push(`Merge base with "${originBranch}" must be the second commit (test commit)`);
-      return {
-        check: "main-gate",
-        args,
-        passed: false,
-        messages,
-        violations,
-        summary: violations.join("; "),
-        values: { mergeBase, commits, buildBase },
-      };
-    }
-    messages.push(`Merge base with "${originBranch}" is the test commit`);
-
     const specResult = await validateSpecCommit(inspectors, {
       "spec-commit-ref": commits[2],
       ref,

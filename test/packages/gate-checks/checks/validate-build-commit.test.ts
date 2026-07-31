@@ -140,6 +140,29 @@ describe("validate-build-commit", () => {
     });
   });
 
+  describe("§3.6.4 Interface Files Excluded", () => {
+    it("returns passed=false when a packages/**/*.interface.ts file is changed, even though packages/ is otherwise allowed", async () => {
+      (inspectors.git.diffTree as ReturnType<typeof vi.fn>).mockResolvedValue([
+        "packages/foo/src/bar.interface.ts",
+      ]);
+      const result = await fn(inspectors, { "build-commit-ref": "abc123" });
+      expect(result.passed).toBe(false);
+      expect(result.violations[0]).toContain("packages/foo/src/bar.interface.ts");
+    });
+
+    it("still allows a non-interface file in the same package", async () => {
+      (inspectors.git.diffTree as ReturnType<typeof vi.fn>).mockResolvedValue([
+        "packages/foo/src/bar.ts",
+      ]);
+      (inspectors.git.added as ReturnType<typeof vi.fn>).mockResolvedValue([
+        "packages/foo/src/bar.ts",
+      ]);
+      (inspectors.git.modified as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+      const result = await fn(inspectors, { "build-commit-ref": "abc123" });
+      expect(result.passed).toBe(true);
+    });
+  });
+
   describe("throws on invalid ref", () => {
     it("throws when commitMessages rejects", async () => {
       (inspectors.git.commitMessages as ReturnType<typeof vi.fn>).mockRejectedValue(

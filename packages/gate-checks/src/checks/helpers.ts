@@ -34,3 +34,11 @@ export function commitTitleStartsWithRef(title: string, ref: string): boolean {
 export function commitTitleContinuesBeyondRef(title: string, ref: string): boolean {
   return title.length > ref.length && title.slice(ref.length).trim().length > 0;
 }
+
+/** Matches `packages/**\/*.interface.ts` — the immutable public interfaces
+ * the test phase commits as fixed contracts (test-writer-instructions.md
+ * §3, build-implementer-instructions.md §3). Test commits may add these
+ * alongside `test/**`; build commits may never change them. */
+export function isInterfaceFile(filePath: string): boolean {
+  return filePath.startsWith("packages/") && filePath.endsWith(".interface.ts");
+}
