@@ -637,6 +637,101 @@ alongside `test/**`, `validate-build-commit` now explicitly excludes them.
 With the gap closed, removed the now-stale prerequisite note from
 `test-writer.md` entirely.
 
+## 3ag. `"git merge --ff-only*"` was missing entirely
+
+`build-implementer`, resuming the spec 05.01 build phase after the Build
+Gate PR merged, ran `git switch build/{ref} && git merge --ff-only
+origin/build/{ref}` per its own §2 step 6 instructions to pull the merged
+branch — the `git merge*` family had no entry at all (only `git
+merge-base*`, a distinct subcommand, was ever added). `--ff-only` is the
+only variant any agent's instructions actually use (pulling a
+known-fast-forwardable branch after a PR merge); it fails clean rather
+than creating a merge commit or losing anything if the branches have
+diverged, so it needs no broader `git merge*` allowance. Added `"git
+merge --ff-only*"` to all three agents, alongside `git merge-base*`.
+
+## 3ah. `"tr*"` was missing entirely
+
+`build-implementer`, resuming the spec 06 build phase, ran a compound
+command ending `git log --oneline origin/build/{ref}..build/{ref} | wc -l
+| tr -d ' '` (trimming a commit count for its own §2 step-6 report) — `tr`
+had no entry at all, same missing-utility class as `head`/`tail`/`grep`/
+`wc`/`cat`/`base64` (all already allowed, all read-only text processing
+with no destructive variant). Added `"tr*"` to all three agents.
+
+## 3ai. `"pnpm vitest*"` was missing entirely
+
+`build-implementer`, spec 06's build phase, ran `pnpm vitest run
+--status-not-started-and-work-in-progress` — pnpm's shorthand for
+running a workspace-local binary directly, distinct from the already-
+allowed `"pnpm exec vitest*"` (different literal prefix, same underlying
+command). Added `"pnpm vitest*"` to all three agents.
+
+## 3aj. `"awk*"` was missing entirely
+
+`build-implementer`, spec 06's build phase, ran `awk -F'[:,]' '...'` to
+parse `coverage/lcov.info` for per-line coverage — read-only text
+processing, same category as `grep`/`sed -n`/`wc`/`tr` (all already
+allowed). Added `"awk*"` to all three agents.
+
+## 3ak. `gh api` read-only comment/review endpoints on the real repo —
+narrowly scoped, not a blanket allowance
+
+`build-implementer`, checking PR #53 for the architect's review comment,
+ran `gh api repos/weaver-engineering/magpie-weaver/issues/{n}/comments`,
+`.../pulls/{n}/reviews`, and `.../pulls/{n}/comments` (inline review
+comments aren't reachable via any `gh pr` subcommand — only the raw API).
+Unlike the sandbox repo's already-allowed blanket `gh api
+repos/.../sandbox-task-phases-DO-NOT-DELETE*` (safe because the whole
+repo is a disposable fixture), a blanket `gh api
+repos/weaver-engineering/magpie-weaver/*` on the real repo would be a
+backdoor around the deliberately-withheld `gh pr merge` — e.g. `gh api -X
+PUT .../pulls/{n}/merge` merges a PR through the exact same generic
+passthrough. Added three narrow, read-only-endpoint-specific patterns
+instead (`issues/*/comments*`, `pulls/*/reviews*`, `pulls/*/comments*`) —
+covers what's needed without opening the generic escape hatch.
+
+## 3al. `gh api .../collaborators/*/permission*` — one more narrow
+read-only endpoint
+
+`build-implementer`, resolving the architect's review comment on PR #53,
+ran `gh api repos/weaver-engineering/magpie-weaver/collaborators/
+simonemmott/permission` — trying to work out who actually left the
+comment (GitHub identity vs. "the architect"). Same read-only-endpoint
+category as §3ak; added `"gh api repos/weaver-engineering/magpie-weaver/
+collaborators/*/permission*"` to all three agents, still not a blanket
+allowance on the real repo's `gh api` surface.
+
+## 3am. `gh api -X POST .../pulls/*/requested_reviewers*` — a narrow
+write action, not a blanket POST allowance
+
+`build-implementer`, having resolved the architect's review comment on
+PR #53, ran `gh api -X POST repos/weaver-engineering/magpie-weaver/
+pulls/53/requested_reviewers -f reviewers[]=simonemmott` to re-request
+review — there's no `gh pr` subcommand for requesting a reviewer after
+the fact, only the raw API. Unlike a generic `-X POST` allowance (which
+would open the door to e.g. the merge endpoint), scoped this to exactly
+the `requested_reviewers` endpoint: low-stakes (a notification, no code
+or merge state changes), and functionally the same category as the
+already-allowed `gh pr comment`/`gh pr edit`. Added to all three agents.
+
+## 3an. Tightened the 16 bare single-word utility permissions to require
+a space before the wildcard
+
+`"cmd*": allow` matches anything whose command name merely *starts with*
+those letters — e.g. `tr*` would also match a hypothetical `train`/
+`trap`/`transmit` command, not just the `tr` utility itself. Changed all
+16 bare-utility patterns (`head`, `tail`, `grep`, `awk`, `wc`, `tr`,
+`cat`, `echo`, `find`, `true`, `date`, `sleep`, `base64`, `ls`, `mkdir`,
+`node`) from `"cmd*"` to `"cmd *"` (a literal trailing space) across all
+three agents. Deliberately held back from mid-session (noted as pending
+at end-of-day 2026-07-31) since the live agent had already been "trained"
+against the patterns as they were — landing this at the start of a fresh
+agent cycle (MAG-46 spec 06 fully merged) instead, specifically so we can
+observe whether it holds the access already granted or a bare zero-
+argument invocation (e.g. plain `ls`, `date`, `true`) now needs its own
+fix.
+
 ## 4. Explicitly out of scope
 
 - `.opencode/tool/task-phases.ts` — **not** created. Per

@@ -18,6 +18,7 @@ permission:
     "git log*": allow
     "git diff*": allow
     "git merge-base*": allow
+    "git merge --ff-only*": allow
     "git rebase*": allow
     "git cherry-pick*": allow
     "git init*": allow
@@ -50,31 +51,39 @@ permission:
     "gh repo list*": allow
     "gh repo view*": allow
     "gh api repos/weaver-engineering/sandbox-task-phases-DO-NOT-DELETE*": allow
+    "gh api repos/weaver-engineering/magpie-weaver/issues/*/comments*": allow
+    "gh api repos/weaver-engineering/magpie-weaver/pulls/*/reviews*": allow
+    "gh api repos/weaver-engineering/magpie-weaver/pulls/*/comments*": allow
+    "gh api repos/weaver-engineering/magpie-weaver/collaborators/*/permission*": allow
+    "gh api -X POST repos/weaver-engineering/magpie-weaver/pulls/*/requested_reviewers*": allow
     "pnpm gate-check*": allow
     "pnpm test*": allow
     "pnpm --filter*": allow
     "pnpm install*": allow
     "pnpm exec eslint*": allow
     "pnpm exec vitest*": allow
+    "pnpm vitest*": allow
     "sed -n*": allow
     "python3 -*": allow
     "rm -rf*": allow
-    "node*": allow
+    "node *": allow
     "git reset --hard*": allow
     "perl -pi*": allow
-    "head*": allow
-    "tail*": allow
-    "grep*": allow
-    "wc*": allow
-    "cat*": allow
-    "echo*": allow
-    "find*": allow
-    "true*": allow
-    "date*": allow
-    "sleep*": allow
-    "base64*": allow
-    "ls*": allow
-    "mkdir*": allow
+    "head *": allow
+    "tail *": allow
+    "grep *": allow
+    "awk *": allow
+    "wc *": allow
+    "tr *": allow
+    "cat *": allow
+    "echo *": allow
+    "find *": allow
+    "true *": allow
+    "date *": allow
+    "sleep *": allow
+    "base64 *": allow
+    "ls *": allow
+    "mkdir *": allow
 ---
 
 # `test-writer` — Standing Instructions
