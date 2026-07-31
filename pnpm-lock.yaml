@@ -381,6 +381,10 @@ importers:
         version: 7.0.2
 
   packages/task-phases:
+    dependencies:
+      simple-git:
+        specifier: ^3.36.0
+        version: 3.36.0(supports-color@8.1.1)
     devDependencies:
       '@types/node':
         specifier: ^26.1.1
