@@ -74,7 +74,10 @@ function writeCommandResult(
   json: boolean,
 ): void {
   if (json) {
-    writeLine(JSON.stringify({ command, args, result }));
+    // The structured result mirrors the exit-code contract (§4.1): success
+    // is reported at the top level so a caller that only reads JSON agrees
+    // with a caller that only reads the exit code.
+    writeLine(JSON.stringify({ command, args, result, success: result.success }));
     return;
   }
   for (const message of result.messages) {

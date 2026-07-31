@@ -92,6 +92,9 @@ export interface InitCommandResult extends TaskPhasingCommandResult {
 
 /** `status`-specific result data. */
 export interface StatusCommandResult extends TaskPhasingCommandResult {
+  /** the derived `TaskStatus` this result reports — serialised under the
+   * JSON result object so `--json` callers can read the full derivation */
+  taskStatus: TaskStatus;
   /** true iff `--check` was given AND actually ran gate-check */
   checked: boolean;
   /** true iff `--check` was given but refused because `--ref` named a task
