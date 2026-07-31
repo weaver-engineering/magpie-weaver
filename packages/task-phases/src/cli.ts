@@ -3,6 +3,7 @@
 import { readFile } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { commandRegistry } from "./registry.js";
+import { UsageError } from "./errors.js";
 import { RealGitTool } from "./deps/git.js";
 import { RealGitHubTool } from "./deps/gh.js";
 import { RealFileSystemTool } from "./deps/fs.js";
@@ -31,13 +32,22 @@ type FlagValue = boolean | number | string | string[];
 /** Collects consecutive non-flag tokens following each `--flag`/`-f` into
  * that flag's value: none -> `true`, one -> the bare string, more -> an
  * array. Command-specific arity (e.g. `--wip`'s "at most two, both
- * strings" rule) is validated by the owning command, not here. */
+ * strings" rule) is validated by the owning command, not here.
+ *
+ * Non-flag tokens that aren't a flag's value are captured as positionals
+ * (e.g. `init`'s `<ref>`, which the spec invokes as `init AAA-001
+ * --title ...`) and exposed under `positionals` — a flag's values are
+ * consumed greedily, so only tokens that precede/stand apart from every
+ * flag end up there. `status`/`promote` etc. never pass positionals, and
+ * the key is omitted entirely when there are none. */
 function parseFlags(tokens: string[]): Record<string, FlagValue> {
   const result: Record<string, FlagValue> = {};
+  const positionals: string[] = [];
   let i = 0;
   while (i < tokens.length) {
     const token = tokens[i];
     if (!token.startsWith("-")) {
+      positionals.push(token);
       i++;
       continue;
     }
@@ -55,6 +65,9 @@ function parseFlags(tokens: string[]): Record<string, FlagValue> {
     } else {
       result[key] = values;
     }
+  }
+  if (positionals.length > 0) {
+    result.positionals = positionals;
   }
   return result;
 }
@@ -118,6 +131,12 @@ async function dispatch(
     writeCommandResult(command, args, result, json);
     return result.success ? 0 : 1;
   } catch (error) {
+    if (error instanceof UsageError) {
+      // Invalid argument, caught before command logic ran — the exit-2
+      // bucket (LLD §4.1), surfaced the same way as a bad command name.
+      writeUsageError(error.message);
+      return 2;
+    }
     writeCommandError(command, args, error instanceof Error ? error.message : String(error), json);
     return 1;
   }
