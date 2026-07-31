@@ -83,31 +83,54 @@ derivation pipeline: no phase branch of any kind for a ref (local or
 remote) means `not-initialised`. Every other branch of the pipeline still
 throws `"not implemented"`.
 
-**Spec 05 (`task init` creates spec/quick branches) test and build phases
-are complete** — test phase merged via
-[PR #47](https://github.com/weaver-engineering/magpie-weaver/pull/47);
-build phase (PR #48) reviewed and approved, merge pending. Implemented
-the happy path for both branch-creation routes off `main`, scaffolding
-`docs/tasks/{ref}/task-{ref}.md` from a template. Manually exercising the
-merged build against real git state surfaced a genuine backlog gap:
-`RealGitTool` still stubs 5 methods (`isDirty`, `hasCommitsBeyond`,
-`headCommitTitle`, `pullFastForward`, `deleteBranch`) that `init` depends
-on directly, and that `wip`/`promote`/`switch` (MAG-46-07/10/14/15/17)
-also call — but every one of those chunks tests only against mocked
-`git`, and no chunk in the documented backlog (00 through 18) gives any
-of these 5 methods real-world coverage. `init` doesn't actually work
-end-to-end without them, so this is addressed immediately as MAG-46-05.01
-rather than deferred.
+**Spec 05 (`task init` creates spec/quick branches) is done** — full
+cycle, merged via
+[PR #47](https://github.com/weaver-engineering/magpie-weaver/pull/47)
+(test) and [PR #48](https://github.com/weaver-engineering/magpie-weaver/pull/48)
+(build). Implemented the happy path for both branch-creation routes off
+`main`, scaffolding `docs/tasks/{ref}/task-{ref}.md` from a template.
+Manually exercising the merged build against real git state surfaced a
+genuine backlog gap: `RealGitTool` still stubbed 5 methods (`isDirty`,
+`hasCommitsBeyond`, `headCommitTitle`, `pullFastForward`, `deleteBranch`)
+that `init` depends on directly, and that `wip`/`promote`/`switch`
+(MAG-46-07/10/14/15/17) also call — but every one of those chunks tests
+only against mocked `git`, and no chunk in the documented backlog (00
+through 18) gave any of these 5 methods real-world coverage. Addressed
+immediately as MAG-46-05.01 rather than deferred.
 
-## Current Scope: spec 05.01
+**Spec 05.01 (real `isDirty`/`hasCommitsBeyond`/`headCommitTitle`/
+`pullFastForward`/`deleteBranch`) is done** — full cycle, merged via
+[PR #49](https://github.com/weaver-engineering/magpie-weaver/pull/49)
+(test) and [PR #51](https://github.com/weaver-engineering/magpie-weaver/pull/51)
+(build, squash-merged). `RealGitTool` now covers all methods `init` needs;
+confirmed end-to-end with a real, disposable `pnpm task init` run against
+the primary worktree. One process gap surfaced along the way: the
+`build/{ref}`/`test/{ref}` clear-down step after a Main Gate merge was
+missed once, leaving a stale `build/MAG-46` that produced a spurious
+merge conflict on the next chunk's Build Gate PR — see memory
+`feedback_clear_down_stale_phase_branches` for the recipe now being
+followed each cycle. A separate `git merge --ff-only*` permission gap
+(build-implementer resuming after this PR merged) was fixed via
+`task/MAG-40` ([PR #50](https://github.com/weaver-engineering/magpie-weaver/pull/50),
+left open in case more surface before closing it out).
+
+## Current Scope: spec 06
 
 **Working spec doc:**
-`task-MAG-46-05-01-dev-testing-git-status-and-cleanup-spec.md` (copied
-alongside this file). Real implementations of `GitTool`'s remaining 5
-uncovered methods, exercised via `--dev-testing git <method>` (the entry
-point built in MAG-46-01), same real-world-execution pattern as MAG-46-01
-and MAG-46-13. Full `spec` -> `test` -> `build` path. Spec 06 (`status`
-against `spec/{ref}`/`task/{ref}`) follows once this lands.
+`task-MAG-46-06-status-not-started-and-work-progress-spec.md` (copied
+alongside this file). Extends `pnpm task status [--ref <ref>]` to derive
+`not-started`/`work-in-progress` for both `spec/{ref}` and `task/{ref}`,
+plus the ancestry-staleness fallback, `branchMismatch`, and WIP-marked-
+head-commit behaviors — against injected `git`/`github` test doubles,
+same command-level pattern as MAG-46-04/05. Full `spec` -> `test` ->
+`build` path.
+
+Note: `pnpm task init MAG-46` cannot be used to move this long-running
+ref onto a new chunk — confirmed directly (`task init` refuses with
+"Branch `spec/MAG-46` already exists"), since the existing-branch-reuse
+decision tree is explicitly deferred to MAG-46-18. Continuing to raise
+each chunk's spec commit directly onto the existing `spec/{ref}` branch,
+as for every prior chunk.
 
 **Phase ownership unchanged:** specification is architect-owned (this
 chunk's spec commit is already done); test and build are for the agent.
