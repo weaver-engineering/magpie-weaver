@@ -83,13 +83,31 @@ derivation pipeline: no phase branch of any kind for a ref (local or
 remote) means `not-initialised`. Every other branch of the pipeline still
 throws `"not implemented"`.
 
-## Current Scope: spec 05
+**Spec 05 (`task init` creates spec/quick branches) test and build phases
+are complete** — test phase merged via
+[PR #47](https://github.com/weaver-engineering/magpie-weaver/pull/47);
+build phase (PR #48) reviewed and approved, merge pending. Implemented
+the happy path for both branch-creation routes off `main`, scaffolding
+`docs/tasks/{ref}/task-{ref}.md` from a template. Manually exercising the
+merged build against real git state surfaced a genuine backlog gap:
+`RealGitTool` still stubs 5 methods (`isDirty`, `hasCommitsBeyond`,
+`headCommitTitle`, `pullFastForward`, `deleteBranch`) that `init` depends
+on directly, and that `wip`/`promote`/`switch` (MAG-46-07/10/14/15/17)
+also call — but every one of those chunks tests only against mocked
+`git`, and no chunk in the documented backlog (00 through 18) gives any
+of these 5 methods real-world coverage. `init` doesn't actually work
+end-to-end without them, so this is addressed immediately as MAG-46-05.01
+rather than deferred.
+
+## Current Scope: spec 05.01
 
 **Working spec doc:**
-`task-MAG-46-05-init-creates-spec-and-quick-branches-spec.md` (copied
-alongside this file). `pnpm task init <ref> [--quick] [--title <title>]
-[--json]`, exercised in-process against injected `git`/`fileSystem` test
-doubles, same as spec 04. Full `spec` -> `test` -> `build` path.
+`task-MAG-46-05-01-dev-testing-git-status-and-cleanup-spec.md` (copied
+alongside this file). Real implementations of `GitTool`'s remaining 5
+uncovered methods, exercised via `--dev-testing git <method>` (the entry
+point built in MAG-46-01), same real-world-execution pattern as MAG-46-01
+and MAG-46-13. Full `spec` -> `test` -> `build` path. Spec 06 (`status`
+against `spec/{ref}`/`task/{ref}`) follows once this lands.
 
 **Phase ownership unchanged:** specification is architect-owned (this
 chunk's spec commit is already done); test and build are for the agent.
