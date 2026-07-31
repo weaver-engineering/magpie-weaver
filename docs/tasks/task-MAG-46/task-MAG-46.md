@@ -74,15 +74,22 @@ run against permanent fixture branches on a dedicated sandbox repo
 README) rather than merging PRs live, since `gh pr merge` is a
 deliberately withheld agent permission.
 
-## Current Scope: spec 04
+**Spec 04 (`task status` reports `not-initialised`) is done** — full
+cycle, merged via
+[PR #45](https://github.com/weaver-engineering/magpie-weaver/pull/45).
+First *command-level* chunk (`run(argv, mockTools)` in-process, no real
+git/gh/fs calls) — implemented the base case of the §3.2 status
+derivation pipeline: no phase branch of any kind for a ref (local or
+remote) means `not-initialised`. Every other branch of the pipeline still
+throws `"not implemented"`.
 
-**Working spec doc:** `task-MAG-46-04-status-not-initialised-spec.md`
-(copied alongside this file). This is the first *command-level* chunk —
-unlike specs 01–03 (real-world execution against actual git/gh/fs, no
-mocks), spec 04 tests `pnpm task status` by calling `run(argv,
-mockTools)` in-process against a mocked `ExternalTools` (dev-testing
-design doc §7). Full `spec` -> `test` -> `build` path, same as every
-chunk since spec 00.
+## Current Scope: spec 05
+
+**Working spec doc:**
+`task-MAG-46-05-init-creates-spec-and-quick-branches-spec.md` (copied
+alongside this file). `pnpm task init <ref> [--quick] [--title <title>]
+[--json]`, exercised in-process against injected `git`/`fileSystem` test
+doubles, same as spec 04. Full `spec` -> `test` -> `build` path.
 
 **Phase ownership unchanged:** specification is architect-owned (this
 chunk's spec commit is already done); test and build are for the agent.
