@@ -64,7 +64,14 @@ jobs:
 
       - name: Report result
         run: |
-          PASSED=$(node -e "console.log(JSON.parse(require('fs').readFileSync('result.json')).passed)")
+          # pnpm exec appends its own "[ELIFECYCLE] Command failed..." line
+          # to stdout whenever the wrapped command exits non-zero (i.e.
+          # whenever the gate genuinely fails) - result.json can have a
+          # second, non-JSON line in that case. Only the first line is
+          # ever the actual gate-check result.
+          head -1 result.json > result-line.json
+
+          PASSED=$(node -e "console.log(JSON.parse(require('fs').readFileSync('result-line.json')).passed)")
 
           if [ "$PASSED" = "true" ]; then
             gh api "/repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }}" \
@@ -72,8 +79,8 @@ jobs:
             gh api "/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
               -f body="All BuildGate validations pass"
           else
-            SUMMARY=$(node -e "console.log(JSON.parse(require('fs').readFileSync('result.json')).summary)")
-            VIOLATIONS=$(node -e "console.log(JSON.parse(require('fs').readFileSync('result.json')).violations.join('\n'))")
+            SUMMARY=$(node -e "console.log(JSON.parse(require('fs').readFileSync('result-line.json')).summary)")
+            VIOLATIONS=$(node -e "console.log(JSON.parse(require('fs').readFileSync('result-line.json')).violations.join('\n'))")
             gh api "/repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }}" \
               -f state=failure -f context=BuildGate -f description="BuildGate validation failed"
             gh api "/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
