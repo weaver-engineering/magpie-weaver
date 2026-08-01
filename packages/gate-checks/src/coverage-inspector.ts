@@ -2,7 +2,7 @@ import { exec, execSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
-import { type CoverageInspector, type TestResults } from "./coverage-interface.js";
+import { type BuildResult, type CoverageInspector, type TestResults } from "./coverage-interface.js";
 
 const execAsync = promisify(exec);
 
@@ -55,6 +55,24 @@ export class CoverageInspectorImpl implements CoverageInspector {
     ].filter(Boolean).join(" ");
 
     execSync(this.json ? `${command} >/dev/null 2>&1` : command, { cwd: this.cwd, stdio: "inherit" });
+  }
+
+  /**
+   * Build every package via `pnpm -r build` — real `tsc` compilation,
+   * never run by `runTestsWithCoverage()` (vitest's esbuild transform
+   * strips types rather than checking them).
+   *
+   * @returns Whether the build succeeded, with the combined stdout/stderr
+   */
+  runBuild(): BuildResult {
+    try {
+      const output = execSync("pnpm -r build", { cwd: this.cwd, encoding: "utf-8" });
+      return { success: true, output };
+    } catch (error) {
+      const err = error as { stdout?: string; stderr?: string; message?: string };
+      const output = [err.stdout, err.stderr].filter(Boolean).join("\n") || err.message || "Build failed";
+      return { success: false, output };
+    }
   }
 
   /**

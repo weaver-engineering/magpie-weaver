@@ -4,6 +4,13 @@ export interface TestResults {
   failingTestFiles: string[];
 }
 
+export interface BuildResult {
+  success: boolean;
+  /** Combined stdout/stderr from the build command — the raw compiler
+   * output, surfaced verbatim on failure rather than reworded. */
+  output: string;
+}
+
 /**
  * A shallow interface to the package manager for running tests and collecting coverage.
  * Required to mock coverage access in unit tests.
@@ -40,4 +47,13 @@ export interface CoverageInspector {
    * @throws If test results file has not been generated yet
    */
   getTestResults(): Promise<TestResults>;
+
+  /**
+   * Build every package (`pnpm -r build`) — real type-checking compilation,
+   * distinct from `runTestsWithCoverage()`: vitest transpiles TypeScript
+   * via esbuild (transpile-only, no type-checking), so tests can pass
+   * while `tsc` itself would fail. This is the only check in the gate
+   * pipeline that actually verifies the code compiles.
+   */
+  runBuild(): BuildResult;
 }

@@ -5,6 +5,7 @@ import { fn as validateTestCommit } from "./validate-test-commit.js";
 import { fn as validateBuildCommit } from "./validate-build-commit.js";
 import { fn as validateTaskCommit } from "./validate-task-commit.js";
 import { fn as coverage } from "./coverage.js";
+import { fn as build } from "./build.js";
 
 export const requiredArgs: string[] = [];
 
@@ -34,7 +35,7 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
   messages.push(...branchResult.messages);
   messages.push("Branch validated via branch-ref");
 
-  const currentBranch = await inspectors.git.currentBranch();
+  const currentBranch = (args["head-ref"] as string) ?? await inspectors.git.currentBranch();
   messages.push(`Current branch: ${currentBranch}`);
 
   let mergeBase: string;
@@ -151,11 +152,15 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
     }
     messages.push(...buildResult.messages);
 
+    const buildCheckResult = await build(inspectors, {});
+    messages.push(...buildCheckResult.messages);
+    violations.push(...buildCheckResult.violations);
+
     const coverageResult = await coverage(inspectors, { "expect-failure": false });
     messages.push(...coverageResult.messages);
     violations.push(...coverageResult.violations);
 
-    const passed = buildResult.passed && coverageResult.passed;
+    const passed = buildResult.passed && buildCheckResult.passed && coverageResult.passed;
     return {
       check: "main-gate",
       args,
@@ -170,6 +175,7 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
         ...specResult.values,
         ...testResult.values,
         ...buildResult.values,
+        ...buildCheckResult.values,
         ...coverageResult.values,
       },
     };
@@ -196,15 +202,32 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
       "task-commit-ref": commits[0],
       ref,
     });
+    if (!taskResult.passed) {
+      return {
+        check: "main-gate",
+        args,
+        passed: false,
+        messages: [...messages, ...taskResult.messages],
+        violations: taskResult.violations,
+        summary: taskResult.summary,
+        values: { commit: commits[0], ...taskResult.values },
+      };
+    }
+    messages.push(...taskResult.messages);
 
+    const buildCheckResult = await build(inspectors, {});
+    messages.push(...buildCheckResult.messages);
+    violations.push(...buildCheckResult.violations);
+
+    const passed = buildCheckResult.passed;
     return {
       check: "main-gate",
       args,
-      passed: taskResult.passed,
-      messages: [...messages, ...taskResult.messages],
-      violations: taskResult.violations,
-      summary: taskResult.passed ? "Main gate passed" : taskResult.summary,
-      values: { commit: commits[0], ...taskResult.values },
+      passed,
+      messages,
+      violations,
+      summary: passed ? "Main gate passed" : violations.join("; "),
+      values: { commit: commits[0], ...taskResult.values, ...buildCheckResult.values },
     };
   }
 

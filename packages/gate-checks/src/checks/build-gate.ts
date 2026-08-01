@@ -5,6 +5,7 @@ import { fn as validateTestCommit } from "./validate-test-commit.js";
 import { fn as coverage } from "./coverage.js";
 import { fn as existingTestsPass } from "./existing-tests-pass.js";
 import { fn as newTestsFail } from "./new-tests-fail.js";
+import { fn as build } from "./build.js";
 
 export const requiredArgs: string[] = [];
 
@@ -127,6 +128,10 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
     ? (newTestsRaw as string[])
     : (newTestsRaw ? [String(newTestsRaw)] : []);
 
+  const buildResult = await build(inspectors, {});
+  messages.push(...buildResult.messages);
+  violations.push(...buildResult.violations);
+
   const coverageResult = await coverage(inspectors, { "expect-failure": true });
   messages.push(...coverageResult.messages);
   violations.push(...coverageResult.violations);
@@ -145,7 +150,7 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
   messages.push(...newTestsFailResult.messages);
   violations.push(...newTestsFailResult.violations);
 
-  const passed = coverageResult.passed && existingPassResult.passed && newTestsFailResult.passed;
+  const passed = buildResult.passed && coverageResult.passed && existingPassResult.passed && newTestsFailResult.passed;
   return {
     check: "build-gate",
     args,
@@ -158,6 +163,7 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
       specCommit: commits[1],
       ...specResult.values,
       ...testResult.values,
+      ...buildResult.values,
       ...coverageResult.values,
       ...existingPassResult.values,
       ...newTestsFailResult.values,

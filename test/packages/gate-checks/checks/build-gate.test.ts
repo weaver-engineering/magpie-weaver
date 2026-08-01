@@ -23,6 +23,7 @@ function createMockInspectors(): Inspectors {
       getNewLineCoverage: vi.fn(),
       getCoverage: vi.fn(),
       getTestResults: vi.fn(),
+      runBuild: vi.fn().mockReturnValue({ success: true, output: "" }),
     } as unknown as CoverageInspector,
   };
 }
@@ -31,6 +32,7 @@ function setupCoverageMocks(inspectors: Inspectors): void {
   (inspectors.coverage.runTestsWithCoverage as ReturnType<typeof vi.fn>).mockImplementation(() => {
     throw new Error("Tests failed");
   });
+  (inspectors.coverage.runBuild as ReturnType<typeof vi.fn>).mockReturnValue({ success: true, output: "" });
   (inspectors.coverage.getCoverage as ReturnType<typeof vi.fn>).mockResolvedValue(85);
   (inspectors.coverage.getNewLineCoverage as ReturnType<typeof vi.fn>).mockResolvedValue(95);
   (inspectors.coverage.getTestResults as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -274,6 +276,66 @@ describe("build-gate", () => {
       expect(result.passed).toBe(false);
       expect(result.violations.length).toBeGreaterThan(0);
       expect(result.check).toBe("build-gate");
+    });
+  });
+
+  describe("Build fails", () => {
+    it("returns passed=false when the build fails, even with valid commits and coverage", async () => {
+      (inspectors.git.currentBranch as ReturnType<typeof vi.fn>).mockResolvedValue("build/MAG-30");
+
+      const mockMergeBase = inspectors.git.mergeBase as ReturnType<typeof vi.fn>;
+      mockMergeBase.mockResolvedValue("merge-base-sha");
+
+      const mockRevList = inspectors.git.revList as ReturnType<typeof vi.fn>;
+      mockRevList.mockResolvedValueOnce(["test-commit-sha", "spec-commit-sha"]);
+      mockRevList.mockResolvedValueOnce([]);
+
+      const mockCommitMessages = inspectors.git.commitMessages as ReturnType<typeof vi.fn>;
+      mockCommitMessages.mockImplementation((ref: string) => {
+        if (ref === "spec-commit-sha") {
+          return Promise.resolve(["MAG-30 Add spec\n\nBody"]);
+        }
+        return Promise.resolve(["MAG-30 Add tests\n\nTest body"]);
+      });
+
+      const mockLsTree = inspectors.git.lsTree as ReturnType<typeof vi.fn>;
+      mockLsTree.mockResolvedValue([
+        "docs/tasks/task-MAG-30/task-MAG-30.md",
+        "docs/tasks/task-MAG-30/task-MAG-30-04-spec.md",
+      ]);
+
+      const mockDiffTree = inspectors.git.diffTree as ReturnType<typeof vi.fn>;
+      mockDiffTree.mockImplementation((ref: string) => {
+        if (ref === "test-commit-sha") {
+          return Promise.resolve(["test/new.test.ts"]);
+        }
+        return Promise.resolve([
+          "docs/tasks/task-MAG-30/task-MAG-30-04-spec.md",
+        ]);
+      });
+
+      const mockAdded = inspectors.git.added as ReturnType<typeof vi.fn>;
+      mockAdded.mockImplementation((ref: string) => {
+        if (ref === "test-commit-sha") {
+          return Promise.resolve(["test/new.test.ts"]);
+        }
+        return Promise.resolve([]);
+      });
+
+      const mockModified = inspectors.git.modified as ReturnType<typeof vi.fn>;
+      mockModified.mockResolvedValue([]);
+
+      setupCoverageMocks(inspectors);
+      (inspectors.coverage.runBuild as ReturnType<typeof vi.fn>).mockReturnValue({
+        success: false,
+        output: "src/foo.ts(3,5): error TS2322",
+      });
+
+      const result = await fn(inspectors, { "destination-branch": "main" });
+
+      expect(result.passed).toBe(false);
+      expect(result.violations).toContain("Build failed");
+      expect(result.values.output).toBe("src/foo.ts(3,5): error TS2322");
     });
   });
 
