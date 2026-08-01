@@ -28,6 +28,14 @@ export default tseslint.config(
     },
   },
   {
+    files: ["**/*.mjs"],
+    languageOptions: {
+      globals: {
+        process: "readonly",
+      },
+    },
+  },
+  {
     ignores: ["**/dist/**", "coverage", "node_modules", "docs"],
   },
 );

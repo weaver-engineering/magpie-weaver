@@ -227,7 +227,11 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
     messages.push(...buildCheckResult.messages);
     violations.push(...buildCheckResult.violations);
 
-    const passed = buildCheckResult.passed;
+    const coverageResult = await coverage(inspectors, { "expect-failure": false });
+    messages.push(...coverageResult.messages);
+    violations.push(...coverageResult.violations);
+
+    const passed = buildCheckResult.passed && coverageResult.passed;
     return {
       check: "main-gate",
       args,
@@ -235,7 +239,12 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
       messages,
       violations,
       summary: passed ? "Main gate passed" : violations.join("; "),
-      values: { commit: commits[0], ...taskResult.values, ...buildCheckResult.values },
+      values: {
+        commit: commits[0],
+        ...taskResult.values,
+        ...buildCheckResult.values,
+        ...coverageResult.values,
+      },
     };
   }
 

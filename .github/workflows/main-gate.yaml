@@ -57,37 +57,72 @@ jobs:
         run: rm -rf node_modules && pnpm install --frozen-lockfile
 
       - name: Run Main Gate
+        env:
+          # The test suite's own gh.test.ts (MAG-46 spec 03) runs real
+          # gh commands against a separate fixture repo
+          # (weaver-engineering/sandbox-task-phases-DO-NOT-DELETE) — the
+          # default github.token is scoped only to this repo and can't
+          # even see that one, let alone clone/PR into it. Nothing else
+          # in this step needs github.token, so it's safe to override
+          # just here rather than job-wide (the report steps below still
+          # need github.token to post back on *this* repo).
+          GH_TOKEN: ${{ secrets.SANDBOX_GH_TOKEN }}
         run: |
-          set +e
+          # gh's own authentication doesn't automatically extend to plain
+          # `git clone`/`git push` (gh.test.ts uses both, not just the gh
+          # CLI) — wire up git's credential helper to delegate to gh,
+          # using the GH_TOKEN set above, so both work the same way.
+          gh auth setup-git
+
+          # pipefail so this step's own pass/fail genuinely reflects the
+          # gate-check's exit code (0 = passed, 1 = failed, 2 = invalid
+          # args), not tee's or node's — both always exit 0. Piped through
+          # tee (rather than `> result.json`) so the raw JSON is still
+          # captured for the artifact/failure step, and rendered as YAML
+          # in this step's own log — the thing a human actually wants to
+          # read when this fails — since a single-line JSON blob isn't.
+          set -o pipefail
           pnpm gate-check main-gate \
             --head-ref "${{ github.head_ref }}" \
             --destination-branch "origin/${{ github.event.pull_request.base.ref }}" \
-            --json > result.json
-          cat result.json
+            --json | tee result.json | node .github/scripts/json-to-yaml.mjs
 
-      - name: Report result
+      - name: Upload gate-check artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-gate-result-${{ github.event.pull_request.number }}
+          path: |
+            result.json
+            coverage/
+          retention-days: 30
+
+      - name: Report success
+        if: success()
         run: |
-          # pnpm exec appends its own "[ELIFECYCLE] Command failed..." line
-          # to stdout whenever the wrapped command exits non-zero (i.e.
-          # whenever the gate genuinely fails) - result.json can have a
-          # second, non-JSON line in that case. Only the first line is
-          # ever the actual gate-check result.
-          head -1 result.json > result-line.json
+          gh api "/repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }}" \
+            -f state=success -f context=MainGate -f description="All MainGate validations pass"
+          gh api "/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            -f body="All MainGate validations pass"
 
-          PASSED=$(node -e "console.log(JSON.parse(require('fs').readFileSync('result-line.json')).passed)")
+      - name: Report failure
+        if: failure()
+        run: |
+          gh api "/repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }}" \
+            -f state=failure -f context=MainGate -f description="MainGate validation failed"
 
-          if [ "$PASSED" = "true" ]; then
-            gh api "/repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }}" \
-              -f state=success -f context=MainGate -f description="All MainGate validations pass"
+          if [ ! -f result.json ]; then
             gh api "/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
-              -f body="All MainGate validations pass"
-          else
-            SUMMARY=$(node -e "console.log(JSON.parse(require('fs').readFileSync('result-line.json')).summary)")
-            VIOLATIONS=$(node -e "console.log(JSON.parse(require('fs').readFileSync('result-line.json')).violations.join('\n'))")
-            gh api "/repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }}" \
-              -f state=failure -f context=MainGate -f description="MainGate validation failed"
-            gh api "/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
-              -f body="$VIOLATIONS"
-            echo "::error::$SUMMARY"
+              -f body="MainGate failed before the check could run — see the workflow run for details."
             exit 1
           fi
+
+          # pnpm exec appends its own "[ELIFECYCLE] Command failed..." line
+          # to stdout whenever the wrapped command exits non-zero - only
+          # the first line of result.json is ever the actual gate result.
+          head -1 result.json > result-line.json
+          SUMMARY=$(node -e "console.log(JSON.parse(require('fs').readFileSync('result-line.json')).summary)")
+          VIOLATIONS=$(node -e "console.log(JSON.parse(require('fs').readFileSync('result-line.json')).violations.join('\n'))")
+          gh api "/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            -f body="$VIOLATIONS"
+          echo "::error::$SUMMARY"
