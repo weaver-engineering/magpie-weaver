@@ -23,12 +23,14 @@ function createMockInspectors(): Inspectors {
       getNewLineCoverage: vi.fn(),
       getCoverage: vi.fn(),
       getTestResults: vi.fn(),
+      runBuild: vi.fn().mockReturnValue({ success: true, output: "" }),
     } as unknown as CoverageInspector,
   };
 }
 
 function setupCoverageMocks(inspectors: Inspectors): void {
   (inspectors.coverage.runTestsWithCoverage as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+  (inspectors.coverage.runBuild as ReturnType<typeof vi.fn>).mockReturnValue({ success: true, output: "" });
   (inspectors.coverage.getCoverage as ReturnType<typeof vi.fn>).mockResolvedValue(85);
   (inspectors.coverage.getNewLineCoverage as ReturnType<typeof vi.fn>).mockResolvedValue(95);
   (inspectors.coverage.getTestResults as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -123,6 +125,21 @@ describe("main-gate", () => {
 
       expect(result.passed).toBe(true);
     });
+
+    it("returns passed=false when the build fails, even with valid commits and coverage", async () => {
+      setupBuildSuccess(inspectors);
+      setupCoverageMocks(inspectors);
+      (inspectors.coverage.runBuild as ReturnType<typeof vi.fn>).mockReturnValue({
+        success: false,
+        output: "src/foo.ts(3,5): error TS2322",
+      });
+
+      const result = await fn(inspectors, { "destination-branch": "main" });
+
+      expect(result.passed).toBe(false);
+      expect(result.violations).toContain("Build failed");
+      expect(result.values.output).toBe("src/foo.ts(3,5): error TS2322");
+    });
   });
 
   describe("Valid task branch", () => {
@@ -153,6 +170,73 @@ describe("main-gate", () => {
       expect(result.passed).toBe(true);
       expect(result.violations).toHaveLength(0);
       expect(result.check).toBe("main-gate");
+    });
+
+    it("derives the route from --head-ref, not git.currentBranch(), for a detached-HEAD checkout (CI)", async () => {
+      // CI checks out a detached HEAD — git.currentBranch() would report
+      // "HEAD", not the real branch name. --head-ref must take priority.
+      (inspectors.git.currentBranch as ReturnType<typeof vi.fn>).mockResolvedValue("HEAD");
+
+      const mockMergeBase = inspectors.git.mergeBase as ReturnType<typeof vi.fn>;
+      mockMergeBase.mockResolvedValue("merge-base-sha");
+
+      const mockRevList = inspectors.git.revList as ReturnType<typeof vi.fn>;
+      mockRevList.mockResolvedValueOnce(["task-commit-sha"]);
+      mockRevList.mockResolvedValueOnce([]);
+
+      const mockCommitMessages = inspectors.git.commitMessages as ReturnType<typeof vi.fn>;
+      mockCommitMessages.mockResolvedValue(["MAG-30 Task commit\n\nTask body"]);
+
+      const mockAdded = inspectors.git.added as ReturnType<typeof vi.fn>;
+      mockAdded.mockResolvedValue([]);
+
+      const mockModified = inspectors.git.modified as ReturnType<typeof vi.fn>;
+      mockModified.mockResolvedValue([]);
+
+      const mockDeleted = inspectors.git.deleted as ReturnType<typeof vi.fn>;
+      mockDeleted.mockResolvedValue([]);
+
+      const result = await fn(inspectors, {
+        "head-ref": "task/MAG-30",
+        "destination-branch": "origin/main",
+      });
+
+      expect(result.passed).toBe(true);
+      expect(result.violations).toHaveLength(0);
+      expect(result.check).toBe("main-gate");
+    });
+
+    it("returns passed=false when the build fails, even with a valid task commit", async () => {
+      (inspectors.git.currentBranch as ReturnType<typeof vi.fn>).mockResolvedValue("task/MAG-30");
+
+      const mockMergeBase = inspectors.git.mergeBase as ReturnType<typeof vi.fn>;
+      mockMergeBase.mockResolvedValue("merge-base-sha");
+
+      const mockRevList = inspectors.git.revList as ReturnType<typeof vi.fn>;
+      mockRevList.mockResolvedValueOnce(["task-commit-sha"]);
+      mockRevList.mockResolvedValueOnce([]);
+
+      const mockCommitMessages = inspectors.git.commitMessages as ReturnType<typeof vi.fn>;
+      mockCommitMessages.mockResolvedValue(["MAG-30 Task commit\n\nTask body"]);
+
+      const mockAdded = inspectors.git.added as ReturnType<typeof vi.fn>;
+      mockAdded.mockResolvedValue([]);
+
+      const mockModified = inspectors.git.modified as ReturnType<typeof vi.fn>;
+      mockModified.mockResolvedValue([]);
+
+      const mockDeleted = inspectors.git.deleted as ReturnType<typeof vi.fn>;
+      mockDeleted.mockResolvedValue([]);
+
+      (inspectors.coverage.runBuild as ReturnType<typeof vi.fn>).mockReturnValue({
+        success: false,
+        output: "src/foo.ts(3,5): error TS2322",
+      });
+
+      const result = await fn(inspectors, { "destination-branch": "main" });
+
+      expect(result.passed).toBe(false);
+      expect(result.violations).toContain("Build failed");
     });
   });
 

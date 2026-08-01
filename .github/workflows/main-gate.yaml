@@ -1,9 +1,10 @@
-name: Build Gate
+name: Main Gate
 
-# Build Gate: PR from test/{ref} -> build/{ref}
-# Thin wrapper around `pnpm gate-check build-gate` — the single source of
-# truth for the actual validation logic (spec/test commit structure,
-# fail-then-pass, coverage thresholds, and a real `tsc` build). See
+# Main Gate: PR from build/{ref} (full route, 3 commits) or task/{ref}
+# (quick route, 1 commit) -> main.
+# Thin wrapper around `pnpm gate-check main-gate` — the single source of
+# truth for the actual validation logic (spec/test/build or task commit
+# structure, coverage thresholds, and a real `tsc` build). See
 # packages/gate-checks for the implementation; nothing here re-derives it.
 # Human approval (required reviewers) and human override (admin bypass of a
 # failing required check) are configured in branch protection, not here.
@@ -11,10 +12,10 @@ name: Build Gate
 on:
   pull_request:
     branches:
-      - 'build/**'
+      - 'main'
 
 concurrency:
-  group: build-gate-${{ github.event.pull_request.number }}
+  group: main-gate-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions:
@@ -23,8 +24,8 @@ permissions:
   statuses: write
 
 jobs:
-  validate-build-gate:
-    if: startsWith(github.head_ref, 'test/')
+  validate-main-gate:
+    if: startsWith(github.head_ref, 'build/') || startsWith(github.head_ref, 'task/')
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -53,10 +54,10 @@ jobs:
       - name: Reinstall to link workspace bins (dist/ now exists)
         run: rm -rf node_modules && pnpm install --frozen-lockfile
 
-      - name: Run Build Gate
+      - name: Run Main Gate
         run: |
           set +e
-          pnpm gate-check build-gate \
+          pnpm gate-check main-gate \
             --head-ref "${{ github.head_ref }}" \
             --destination-branch "origin/${{ github.event.pull_request.base.ref }}" \
             --json > result.json
@@ -68,14 +69,14 @@ jobs:
 
           if [ "$PASSED" = "true" ]; then
             gh api "/repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }}" \
-              -f state=success -f context=BuildGate -f description="All BuildGate validations pass"
+              -f state=success -f context=MainGate -f description="All MainGate validations pass"
             gh api "/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
-              -f body="All BuildGate validations pass"
+              -f body="All MainGate validations pass"
           else
             SUMMARY=$(node -e "console.log(JSON.parse(require('fs').readFileSync('result.json')).summary)")
             VIOLATIONS=$(node -e "console.log(JSON.parse(require('fs').readFileSync('result.json')).violations.join('\n'))")
             gh api "/repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }}" \
-              -f state=failure -f context=BuildGate -f description="BuildGate validation failed"
+              -f state=failure -f context=MainGate -f description="MainGate validation failed"
             gh api "/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
               -f body="$VIOLATIONS"
             echo "::error::$SUMMARY"
