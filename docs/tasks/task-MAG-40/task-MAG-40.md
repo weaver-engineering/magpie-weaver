@@ -732,6 +732,30 @@ observe whether it holds the access already granted or a bare zero-
 argument invocation (e.g. plain `ls`, `date`, `true`) now needs its own
 fix.
 
+## 3ao. `build-implementer` now works on `main/{ref}`, not `build/{ref}`
+directly
+
+GitHub branch protection is being enabled on `build/{ref}` (MAG-30), and
+`build-implementer` previously pushed its own build commit directly onto
+`build/{ref}` after the Build Gate PR merged — a direct push, which
+branch protection would block outright. Rather than carve out an
+exception (uncertain whether `required_status_checks` alone would even
+allow it, per GitHub's own ambiguous docs on direct-push handling),
+`build/{ref}` now only ever receives the Build Gate PR merge (spec+test)
+and can be fully protected. `build-implementer` creates `main/{ref}` off
+`build/{ref}` instead, does its work and pushes there, and raises the
+Main Gate PR from `main/{ref}` → `main`. Updated §2 (Session Start
+Protocol), §4 (gate description), §5 (Committing), and §6 (Ending The
+Session) throughout `build-implementer.md`. `main-gate.ts` was updated to
+accept both `build/{ref}` and `main/{ref}` as the full-route branch (it
+runs both in CI, validating the real `main/{ref}` → `main` PR, and
+locally as the agent's own self-verification step, possibly before it's
+renamed/pushed `main/{ref}` yet) — see `task/MAG-30`
+([PR #56](https://github.com/weaver-engineering/magpie-weaver/pull/56),
+merged). `test-writer.md`/`quick-scaffolder.md` are unaffected —
+`test-writer` still creates `build/{ref}` and raises the Build Gate PR
+into it exactly as before; only the phase after that changes.
+
 ## 4. Explicitly out of scope
 
 - `.opencode/tool/task-phases.ts` — **not** created. Per
