@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
 import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { dirname } from "node:path";
 import { catalog } from "./checks/index.js";
 import { CoverageInspectorImpl } from "./coverage-inspector.js";
 import { GitInspectorImpl } from "./git-inspector.js";
+import { findWorkspaceRoot } from "./workspace-root.js";
 import type { GateCheckResult } from "./types.js";
 
 function parseArgs(
@@ -121,10 +122,10 @@ async function main(): Promise<void> {
     }
   }
 
-  const packageDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const repoRoot = findWorkspaceRoot(dirname(fileURLToPath(import.meta.url)));
   const inspectors = {
     git: new GitInspectorImpl(),
-    coverage: new CoverageInspectorImpl({ cwd: packageDir, json }),
+    coverage: new CoverageInspectorImpl({ cwd: repoRoot, json }),
   };
 
   let result: GateCheckResult;
