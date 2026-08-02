@@ -215,25 +215,28 @@ checks first and leaves an existing doc untouched, reporting `written:
 false`; `init` skips `--commit` entirely when nothing was written, rather
 than attempting an empty commit.
 
-## Current Scope: spec 06.01
+## Current Scope: spec 07
 
-**Working spec doc:**
-`task-MAG-46-06-01-status-defers-when-gate-pr-exists-spec.md` (copied
-alongside this file). Adds the explicit required behavior MAG-46-06
-never had: a merged or open PR on any of the three gate pairs
-(`build/{ref}`→`main`, `task/{ref}`→`main`, `test/{ref}`→`build/{ref}`)
-causes `status` to defer, checked *before* the no-PR branch-exists
-derivation MAG-46-06 already implements. Full `spec` -> `test` -> `build`
-path — PR #53 is being sent back asking `build-implementer` to strip the
-dead `assertNoGatePR` code for now; it gets reintroduced here, properly
-driven by this chunk's own failing tests.
+**Working spec doc:** `task-MAG-46-07-wip-commit-spec.md` (copied
+alongside this file). Implements `pnpm task wip [title] [message]` —
+commits everything on the current branch with the `{ref}: {title} - WIP`
+title convention, pushes it, and fails cleanly (no empty commit) when the
+worktree is already clean. Pure git write against `isDirty`/`commitAll`/
+`push`/`changedFiles` (the last one's a new `GitTool` addition this
+chunk's own notes flag — raise with the architect before inventing a
+shape unilaterally) — no `lib/repo-state.ts`/`lib/task-doc.ts` dependency
+(§2.1 of the LLD-note-additions review: `wip` is a pure git write, not a
+derivation consumer).
 
-Note: `pnpm task init MAG-46` cannot be used to move this long-running
-ref onto a new chunk — confirmed directly (`task init` refuses with
-"Branch `spec/MAG-46` already exists"), since the existing-branch-reuse
-decision tree is explicitly deferred to MAG-46-18. Continuing to raise
-each chunk's spec commit directly onto the existing `spec/{ref}` branch,
-as for every prior chunk.
+**`spec/MAG-46` was created via a real `pnpm task init MAG-46` run** —
+the first chunk actually scaffolded by the tool rather than by hand,
+now that `spec/MAG-46` gets cleared down after each chunk (see the note
+above) instead of persisting stale across the whole backlog. `--specs`
+isn't implemented yet (MAG-46-18), so the spec doc itself was still
+copied in by hand; everything else — branch creation, confirming the
+task doc already existed and leaving it untouched — went through `init`
+for real, `--commit` deliberately omitted so the scaffold could be
+inspected before anything was pushed.
 
 **Phase ownership unchanged:** specification is architect-owned (this
 chunk's spec commit is already done); test and build are for the agent.
