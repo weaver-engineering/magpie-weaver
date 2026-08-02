@@ -1,4 +1,4 @@
-import type { ExternalTools, Phase, TaskState, TaskStatus } from "../types.js";
+import type { ExternalTools, GateName, Phase, TaskState, TaskStatus } from "../types.js";
 
 /**
  * Repo-state derivation shared across commands — see task-phasing-lld.md
@@ -93,12 +93,17 @@ async function derivePhase(
   throw new Error("not implemented");
 }
 
-/** Derives the no-PR branch-exists `PhaseState` (spec 06): no commits
- * beyond `main` → `not-started`; commits exist → `work-in-progress`. The
- * head commit's title is consulted for the WIP marker (§3.7) — a
- * WIP-marked head holds derivation at `work-in-progress`, never `ready?`.
- * `ready?`/`ready`/`blocked` resolution itself is MAG-46-09's scope, so
- * both WIP-marked and plain heads resolve to `work-in-progress` here. */
+/** Derives the no-PR branch-exists `PhaseState` (specs 06 + 09): no
+ * commits beyond `main` → `not-started`; commits exist → `ready?`, unless
+ * the head commit is WIP-marked, which holds derivation at
+ * `work-in-progress` (§3.7) — a WIP-marked head never reaches `ready?`.
+ * `ready?`/`ready`/`blocked` *resolution* itself is `resolveReady()`'s
+ * scope (MAG-46-09 §2.1), not this function's.
+ *
+ * This is spec 06's post-MAG-46-09 correction (§3.2/§3.4/§3.5): a
+ * non-WIP-marked branch with commits reports `ready?`, not
+ * `work-in-progress`. Only a genuinely WIP-marked head stays
+ * `work-in-progress`. */
 async function deriveState(
   tools: ExternalTools,
   canonicalBranch: string,
@@ -106,8 +111,59 @@ async function deriveState(
   if (!(await tools.git.hasCommitsBeyond(canonicalBranch, "main"))) {
     return "not-started";
   }
-  await tools.git.headCommitTitle(canonicalBranch);
-  return "work-in-progress";
+  const title = await tools.git.headCommitTitle(canonicalBranch);
+  if (title.includes("WIP")) {
+    return "work-in-progress";
+  }
+  return "ready?";
+}
+
+/** LLD §3.7's phase -> destination-gate table, keyed off `status.phase` —
+ * the same mapping the gate-checks tool's `gateFor()` holds, inline here
+ * because `resolveReady()` must populate the `gate` metadata without
+ * conscripting the gate-check tool itself (nothing may run `gateChecks`
+ * on the non-ready? pass-through path). `enforced` is false only for the
+ * `spec` → `test-gate` step, which the branch-protection layer doesn't
+ * cover. */
+const GATE_FOR_PHASE: Readonly<Record<Phase, { name: GateName; enforced: boolean }>> = {
+  spec: { name: "test-gate", enforced: false },
+  test: { name: "build-gate", enforced: true },
+  build: { name: "main-gate", enforced: true },
+  quick: { name: "main-gate", enforced: true },
+};
+
+/** Resolves a `ready?` `TaskStatus` to `ready` or `blocked` by running the
+ * destination gate for its derived phase (MAG-46-09 §2.1, LLD §3.7) —
+ * `promote` (MAG-46-10/11) calls this unconditionally, so it MUST be a
+ * pure pass-through for any state that isn't already `ready?`: it returns
+ * the exact input object and never touches `gateChecks`, letting callers
+ * rely on it always being safe to call.
+ *
+ * When the state *is* `ready?`, `gateChecks.run(phase, {ref})` is invoked
+ * with the derived phase — not a guessed one — and the result reshaped
+ * into `ready` (passed) or `blocked` (failed), with the `gate` metadata
+ * populated from the LLD §3.7 table above. */
+export async function resolveReady(
+  tools: ExternalTools,
+  status: TaskStatus,
+): Promise<TaskStatus> {
+  if (status.state !== "ready?") {
+    return status;
+  }
+  const phase = status.phase;
+  if (phase === null) {
+    return status;
+  }
+  const result = await tools.gateChecks.run(phase, { ref: status.ref });
+  return {
+    ...status,
+    state: result.passed ? "ready" : "blocked",
+    gate: {
+      name: GATE_FOR_PHASE[phase].name,
+      enforced: GATE_FOR_PHASE[phase].enforced,
+      result,
+    },
+  };
 }
 
 /** Derives the full repo state for `ref` — LLD §4.5's pipeline: no phase
