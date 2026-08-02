@@ -198,6 +198,23 @@ Same treatment as `test`/`build`/`ready/{ref}` from here on: gone right
 after each chunk merges, letting `init` create it fresh for the next one
 instead of needing a manual branch check first.
 
+**`init` no longer overwrites an existing task doc** — real bug, found
+immediately on the very first real `init MAG-46` run once `spec/MAG-46`
+was actually clear: `scaffoldTaskDoc()` wrote the blank template
+unconditionally, with no check for whether the doc already existed. It
+silently replaced this file's entire 200+-line history (every prior
+chunk's progress notes) with the 30-line blank template — caught only
+because `--commit` wasn't given yet, so nothing was pushed; `git checkout
+--` recovered it. This was always a gap in spec 05's original
+implementation, not something introduced by the `spec/{ref}` clear-down
+above — the LLD's own §3.8 pseudocode already conditions the
+template-scaffold step on "and the task doc does not exist," which was
+simply never implemented. It never surfaced before because every real
+`init` call to date was for a genuinely new ref. `scaffoldTaskDoc()` now
+checks first and leaves an existing doc untouched, reporting `written:
+false`; `init` skips `--commit` entirely when nothing was written, rather
+than attempting an empty commit.
+
 ## Current Scope: spec 06.01
 
 **Working spec doc:**

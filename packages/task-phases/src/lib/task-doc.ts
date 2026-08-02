@@ -36,13 +36,21 @@ function ensureMarkdown(name: string): string {
  * template, substituting `${ref}`/`${title}`, creating the task
  * directory first if it doesn't already exist. Layout comes from the
  * `.task-phases.json` config (docs at `docs/tasks/`, task dir named after
- * the ref, task doc `task-{ref}.md` inside it, by default). Returns the
- * path written. */
+ * the ref, task doc `task-{ref}.md` inside it, by default).
+ *
+ * **Never overwrites an existing task doc** (LLD §3.8: "if `--title` is
+ * given and the task doc does not exist -> copy task template..." — the
+ * existence check is part of the original condition, not an addition).
+ * A ref whose `spec/{ref}` branch was cleared down after its own cycle
+ * (rather than reused, LLD §3.14/MAG-46-18) still has its task doc's real
+ * history sitting on `main` — `init` recreating the branch must not
+ * silently replace that with a blank template. Returns `written: false`
+ * and leaves the file untouched when it already exists. */
 export async function scaffoldTaskDoc(
   tools: ExternalTools,
   ref: string,
   title: string | undefined,
-): Promise<{ taskDocPath: string }> {
+): Promise<{ taskDocPath: string; written: boolean }> {
   const config = await tools.fileSystem.loadConfig();
 
   const docsDir = config.tasks.docs ?? "docs/tasks/";
@@ -56,6 +64,10 @@ export async function scaffoldTaskDoc(
     await tools.fileSystem.mkdir(taskDirPath);
   }
 
+  if (await tools.fileSystem.exists(taskDocPath)) {
+    return { taskDocPath, written: false };
+  }
+
   const templatePath = config.templates.task;
   const template = await tools.fileSystem.readFile(templatePath);
   const content = template
@@ -64,5 +76,5 @@ export async function scaffoldTaskDoc(
 
   await tools.fileSystem.writeFile(taskDocPath, content);
 
-  return { taskDocPath };
+  return { taskDocPath, written: true };
 }
