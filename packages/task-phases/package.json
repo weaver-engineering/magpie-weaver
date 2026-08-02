@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@magpieweaver/gate-checks": "workspace:*",
     "simple-git": "^3.36.0"
   },
   "devDependencies": {

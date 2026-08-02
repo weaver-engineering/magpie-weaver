@@ -382,6 +382,9 @@ importers:
 
   packages/task-phases:
     dependencies:
+      '@magpieweaver/gate-checks':
+        specifier: workspace:*
+        version: link:../gate-checks
       simple-git:
         specifier: ^3.36.0
         version: 3.36.0(supports-color@8.1.1)

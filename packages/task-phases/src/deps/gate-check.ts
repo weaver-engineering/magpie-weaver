@@ -1,3 +1,4 @@
+import { runCheck } from "@magpieweaver/gate-checks";
 import type { GateCheckResult, Phase } from "../types.js";
 
 /**
@@ -6,9 +7,11 @@ import type { GateCheckResult, Phase } from "../types.js";
  * `@magpieweaver/gate-checks`, owning the `Phase` -> destination-gate
  * mapping (§3.7) so no caller needs to know it independently.
  *
- * `RealGateChecksTool` below is a placeholder only: every method throws,
- * including `gateFor` — no method is implemented until the chunk that
- * owns it (MAG-46-08).
+ * `run()` calls through to `@magpieweaver/gate-checks`'s public `runCheck`
+ * entry point (its `index.ts`/`package.json` `main`) — not into the
+ * package's internal `catalog` or inspector construction, which exists
+ * only to support gate-checks' own unit-test mocking (MAG-46-08 spec,
+ * Correction).
  */
 export type GateName = "test-gate" | "build-gate" | "main-gate";
 
@@ -26,14 +29,24 @@ export interface GateChecksTool {
 }
 
 export class RealGateChecksTool implements GateChecksTool {
-  run(
-    _phase: Phase,
-    _args: Record<string, boolean | number | string | string[]>,
+  async run(
+    phase: Phase,
+    args: Record<string, boolean | number | string | string[]>,
   ): Promise<GateCheckResult> {
-    throw new Error("not implemented");
+    return runCheck(this.gateFor(phase), args);
   }
 
-  gateFor(_phase: Phase): GateName {
-    throw new Error("not implemented");
+  gateFor(phase: Phase): GateName {
+    switch (phase) {
+      case "spec":
+        return "test-gate";
+      case "test":
+        return "build-gate";
+      case "build":
+      case "quick":
+        return "main-gate";
+      default:
+        throw new Error(`Unknown phase "${phase}"`);
+    }
   }
 }
