@@ -54,3 +54,26 @@ export async function runCheck(
   const fnResult = def.fn(inspectors, args as Record<string, boolean | number | string>);
   return fnResult instanceof Promise ? await fnResult : fnResult;
 }
+
+/** One catalog entry's public shape — everything a consumer needs to
+ * decide whether a check is the right one and how to call it, without
+ * exposing `fn` (internal wiring, see `runCheck`'s own note above). */
+export interface CheckDescriptor {
+  name: string;
+  description: string;
+  requiredArgs: string[];
+  argDescriptions: Record<string, string>;
+}
+
+/** Lists every check `runCheck` can run, with enough description to pick
+ * the right one and call it correctly — e.g. for an OpenCode tool to
+ * surface to an agent, or any other consumer that shouldn't need to read
+ * this package's own source to discover what's available. */
+export function listChecks(): CheckDescriptor[] {
+  return Object.entries(catalog).map(([name, def]) => ({
+    name,
+    description: def.description,
+    requiredArgs: def.requiredArgs,
+    argDescriptions: def.argDescriptions ?? {},
+  }));
+}
