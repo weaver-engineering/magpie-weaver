@@ -6,9 +6,9 @@
  * Spec 01 implements `fetch`, `currentBranch`, `branchExists`, `headSha`,
  * `createBranch`, `checkout`, `commitAll`, `push`. Spec 05.01 implements
  * `isDirty`, `hasCommitsBeyond`, `headCommitTitle`, `pullFastForward`,
- * `deleteBranch`. The remaining methods (`mergeBase`, `isAncestor`,
- * `rebase`) still throw — real implementations land with the chunk that
- * owns them (MAG-46-13).
+ * `deleteBranch`. Spec 07 implements `changedFiles`. The remaining methods
+ * (`mergeBase`, `isAncestor`, `rebase`) still throw — real implementations
+ * land with the chunk that owns them (MAG-46-13).
  */
 
 import { execFile } from "node:child_process";
@@ -44,6 +44,14 @@ export interface GitTool {
   headCommitTitle(branch: string): Promise<string>;
 
   isDirty(): Promise<boolean>;
+
+  /** `git status --porcelain` parsed into added/changed/deleted buckets —
+   * untracked (`??`) and index-added (`A`) files count as added, deleted
+   * (`D`) as deleted, and everything else (`M`, `R`, `C`, ...) as changed.
+   * Local-checkout-only by nature, like `isDirty`. Callers must run this
+   * *before* any `commitAll`, which stages and commits everything and
+   * leaves the tree clean. */
+  changedFiles(): Promise<{ added: string[]; changed: string[]; deleted: string[] }>;
 
   /** Exit code 1 from `merge-base --is-ancestor` is a legitimate `false`,
    * not an error. */
@@ -140,6 +148,37 @@ export class RealGitTool implements GitTool {
   async isDirty(): Promise<boolean> {
     const status = await this.git.raw(["status", "--porcelain"]);
     return status.trim() !== "";
+  }
+
+  /** `git status --porcelain` parsed into added/changed/deleted buckets.
+   * Each porcelain line is `<XY> <path>` — the two status chars are the
+   * index (X) and worktree (Y) state, and the path starts at index 3.
+   * Untracked files report as `??`; a `D` in either position means deleted;
+   * an `A` in either position means added; everything else (`M`, `R`, `C`,
+   * ...) is changed. Paths git quoted (spaces, quotes, non-ASCII) have
+   * their surrounding quotes stripped. Must run before `commitAll`, which
+   * leaves the tree clean. */
+  async changedFiles(): Promise<{ added: string[]; changed: string[]; deleted: string[] }> {
+    const status = await this.git.raw(["status", "--porcelain"]);
+    const added: string[] = [];
+    const changed: string[] = [];
+    const deleted: string[] = [];
+    for (const raw of status.split("\n")) {
+      if (raw.length === 0) continue;
+      const indexStatus = raw[0];
+      const worktreeStatus = raw[1];
+      const path = raw.slice(3).replace(/^"(.*)"$/, "$1");
+      if (indexStatus === "?" && worktreeStatus === "?") {
+        added.push(path);
+      } else if (indexStatus === "D" || worktreeStatus === "D") {
+        deleted.push(path);
+      } else if (indexStatus === "A" || worktreeStatus === "A") {
+        added.push(path);
+      } else {
+        changed.push(path);
+      }
+    }
+    return { added, changed, deleted };
   }
 
   isAncestor(_ancestor: string, _descendant: string): Promise<boolean> {
