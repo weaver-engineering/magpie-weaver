@@ -108,7 +108,7 @@ describe("build-gate", () => {
       expect(mockMergeBase).toHaveBeenCalledWith("HEAD", "main");
     });
 
-    it("defaults destination-branch to main when not provided", async () => {
+    it("defaults destination-branch to origin/main when not provided", async () => {
       (inspectors.git.currentBranch as ReturnType<typeof vi.fn>).mockResolvedValue("build/MAG-30");
 
       const mockMergeBase = inspectors.git.mergeBase as ReturnType<typeof vi.fn>;
@@ -158,7 +158,7 @@ describe("build-gate", () => {
       const result = await fn(inspectors, {});
 
       expect(result.passed).toBe(true);
-      expect(mockMergeBase).toHaveBeenCalledWith("HEAD", "main");
+      expect(mockMergeBase).toHaveBeenCalledWith("HEAD", "origin/main");
     });
   });
 

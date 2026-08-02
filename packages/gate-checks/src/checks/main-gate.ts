@@ -10,7 +10,7 @@ import { fn as build } from "./build.js";
 export const requiredArgs: string[] = [];
 
 export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult> => {
-  const destinationBranch = (args["destination-branch"] as string) || "main";
+  const destinationBranch = (args["destination-branch"] as string) || "origin/main";
   const explicitRef = args["ref"] as string | undefined;
   const messages: string[] = [];
   const violations: string[] = [];
