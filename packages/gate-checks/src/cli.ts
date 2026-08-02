@@ -1,11 +1,6 @@
 #!/usr/bin/env node
 
-import { fileURLToPath } from "node:url";
-import { dirname } from "node:path";
-import { catalog } from "./checks/index.js";
-import { CoverageInspectorImpl } from "./coverage-inspector.js";
-import { GitInspectorImpl } from "./git-inspector.js";
-import { findWorkspaceRoot } from "./workspace-root.js";
+import { runCheck } from "./run-check.js";
 import type { GateCheckResult } from "./types.js";
 
 function parseArgs(
@@ -109,29 +104,12 @@ async function main(): Promise<void> {
     return;
   }
 
-  const def = catalog[checkName];
-  if (!def) {
-    exitInvalid(checkName, `Check "${checkName}" not found`, json);
-    return;
-  }
-
-  for (const requiredArg of def.requiredArgs) {
-    if (!(requiredArg in args)) {
-      exitInvalid(checkName, `Missing required argument: --${requiredArg}`, json);
-      return;
-    }
-  }
-
-  const repoRoot = findWorkspaceRoot(dirname(fileURLToPath(import.meta.url)));
-  const inspectors = {
-    git: new GitInspectorImpl(),
-    coverage: new CoverageInspectorImpl({ cwd: repoRoot, json }),
-  };
-
   let result: GateCheckResult;
   try {
-    const fnResult = def.fn(inspectors, args as Record<string, boolean | number | string>);
-    result = fnResult instanceof Promise ? await fnResult : fnResult;
+    // Interactive (non-`--json`) mode wants the coverage inspector's raw
+    // vitest output to show through, same as before this was extracted
+    // into `runCheck` — only `--json` mode wants it suppressed.
+    result = await runCheck(checkName, args, { quiet: json });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     exitInvalid(checkName, msg, json);
