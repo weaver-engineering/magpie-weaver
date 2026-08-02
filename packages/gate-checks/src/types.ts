@@ -38,6 +38,16 @@ export interface FunctionDef {
 
   /** The list of required arguments for the function */
   requiredArgs: string[];
+
+  /** What the check does and when to use it — surfaced by `listChecks()`
+   * so a consumer can pick the right check without reading source. */
+  description: string;
+
+  /** Human-readable description per argument the check reads (required
+   * or optional), keyed by flag name without the leading `--`. Not every
+   * argument a check reads needs an entry — only ones worth explaining
+   * (e.g. what `--expect-failure` controls, not just that it exists). */
+  argDescriptions?: Record<string, string>;
 }
 
 /**

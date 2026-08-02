@@ -179,4 +179,63 @@ describe("CLI", () => {
       expect(stdout).toContain("commit");
     });
   });
+
+  describe("--list", () => {
+    it("exits 0 with a JSON array of every catalog check", () => {
+      const { stdout, status } = runCli(["--list", "--json"]);
+      expect(status).toBe(0);
+      const parsed = JSON.parse(stdout);
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed.length).toBeGreaterThanOrEqual(14);
+
+      const names = parsed.map((c: { name: string }) => c.name);
+      expect(names).toContain("test-gate");
+      expect(names).toContain("build-gate");
+      expect(names).toContain("main-gate");
+      expect(names).toContain("branch-ref");
+      expect(names).toContain("pr-title");
+
+      const prTitle = parsed.find((c: { name: string }) => c.name === "pr-title");
+      expect(prTitle).toMatchObject({
+        name: "pr-title",
+        requiredArgs: ["ref", "pr-title"],
+      });
+      expect(typeof prTitle.description).toBe("string");
+      expect(prTitle.description.length).toBeGreaterThan(0);
+      expect(prTitle.argDescriptions).toHaveProperty("ref");
+      expect(prTitle.argDescriptions).toHaveProperty("pr-title");
+    });
+
+    it("every check has a non-empty description and every requiredArg is described", () => {
+      const { stdout } = runCli(["--list", "--json"]);
+      const parsed = JSON.parse(stdout) as {
+        name: string;
+        description: string;
+        requiredArgs: string[];
+        argDescriptions: Record<string, string>;
+      }[];
+
+      for (const check of parsed) {
+        expect(check.description.length).toBeGreaterThan(0);
+        for (const requiredArg of check.requiredArgs) {
+          expect(check.argDescriptions[requiredArg]).toBeDefined();
+        }
+      }
+    });
+
+    it("outputs human-readable check names and descriptions when --json is absent", () => {
+      const { stdout, status } = runCli(["--list"]);
+      expect(status).toBe(0);
+      expect(stdout).toContain("test-gate");
+      expect(stdout).toContain("branch-ref");
+      expect(stdout).toContain("--pr-title (required)");
+    });
+
+    it("does not run any check when --list is given, even with a checkName present", () => {
+      const { stdout, status } = runCli(["nonexistent", "--list", "--json"]);
+      expect(status).toBe(0);
+      const parsed = JSON.parse(stdout);
+      expect(Array.isArray(parsed)).toBe(true);
+    });
+  });
 });

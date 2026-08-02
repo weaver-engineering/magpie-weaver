@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { runCheck } from "./run-check.js";
+import { runCheck, listChecks } from "./run-check.js";
+import type { CheckDescriptor } from "./run-check.js";
 import type { GateCheckResult } from "./types.js";
 
 function parseArgs(
@@ -78,6 +79,25 @@ function writeHuman(result: GateCheckResult): void {
   process.stdout.write(`  summary: ${result.summary}\n`);
 }
 
+function writeChecksList(checks: CheckDescriptor[], json: boolean): void {
+  if (json) {
+    process.stdout.write(JSON.stringify(checks) + "\n");
+    return;
+  }
+  for (const check of checks) {
+    process.stdout.write(`${check.name}\n`);
+    process.stdout.write(`  ${check.description}\n`);
+    const argNames = Object.keys(check.argDescriptions);
+    for (const arg of argNames) {
+      const required = check.requiredArgs.includes(arg) ? "required" : "optional";
+      process.stdout.write(`  --${arg} (${required}): ${check.argDescriptions[arg]}\n`);
+    }
+    for (const required of check.requiredArgs.filter((a) => !argNames.includes(a))) {
+      process.stdout.write(`  --${required} (required)\n`);
+    }
+  }
+}
+
 function exitInvalid(checkName: string, message: string, json: boolean): void {
   const result: GateCheckResult = {
     check: checkName || "unknown",
@@ -98,6 +118,12 @@ function exitInvalid(checkName: string, message: string, json: boolean): void {
 
 async function main(): Promise<void> {
   const { checkName, json, args } = parseArgs(process.argv);
+
+  if (args.list === true) {
+    writeChecksList(listChecks(), json);
+    process.exitCode = 0;
+    return;
+  }
 
   if (!checkName) {
     exitInvalid(checkName, "No check name provided", json);
