@@ -133,6 +133,28 @@ territory. Not patched quietly in the build PR — the fix belongs to a
 proper test-driven chunk (MAG-46-06.01) instead of retroactively
 strengthening an already-merged test commit.
 
+**Spec 06.01 (`status` defers when a gate PR exists) is done** — full
+cycle, merged via [PR #58](https://github.com/weaver-engineering/magpie-weaver/pull/58)
+(test) and [PR #64](https://github.com/weaver-engineering/magpie-weaver/pull/64)
+(build). Landed on the `ready/{ref}` architecture (`main/{ref}` — the
+name originally chosen when `build/{ref}` was branch-protected — turned
+out to be structurally impossible: git can't create a branch named
+`main/anything` while `main` itself exists as a branch; see `task/MAG-30`
+for the rename).
+
+**`pnpm task init` now commits and pushes the doc it scaffolds** —
+quick-route commit (`task/MAG-46`, no ticket of its own — a tooling fix
+to `task-phases` itself, dog-fooding the CLI for the first time revealed
+`init` stopped short of committing/pushing what it wrote). By the time
+`init` runs, the design workflow that produced the doc is already
+finished, so queuing it up is purely mechanical. Required updating one
+assertion in the existing chunk-05 test file (`commitAll` was previously
+asserted never-called) — done directly here rather than via test-writer,
+which is categorically barred from editing existing test files; that
+restriction exists to stop an agent silently patching around a test it
+broke by accident, not to block a deliberate, documented revision to an
+earlier chunk's contract.
+
 ## Current Scope: spec 06.01
 
 **Working spec doc:**

@@ -17,6 +17,12 @@
  * after the ref itself, task doc `task-{ref}.md` inside it — encoded
  * explicitly in the mocked config (`dirName: "${ref}"`) rather than left
  * to whatever the implementation's own defaults happen to be.
+ *
+ * `commitAll`/`push` were originally `unexpected`/unasserted here — a
+ * quick-route task/MAG-46 commit revised that: `init` now commits and
+ * pushes the scaffolded doc itself (queuing it up is purely mechanical by
+ * the time `init` runs), so both are now benign mocks the happy-path tests
+ * assert against directly.
  */
 
 // Implements: task-MAG-46-05-init-creates-spec-and-quick-branches-spec.md
@@ -62,6 +68,8 @@ interface MockSet {
     isAncestor: Mock;
     branchExists: Mock;
     createBranch: Mock;
+    commitAll: Mock;
+    push: Mock;
     loadConfig: Mock;
     exists: Mock;
     readFile: Mock;
@@ -90,6 +98,8 @@ function buildTools(
   const isAncestor = overrides.isAncestor ?? vi.fn().mockResolvedValue(true);
   const branchExists = overrides.branchExists ?? vi.fn().mockResolvedValue(false);
   const createBranch = vi.fn().mockResolvedValue(undefined);
+  const commitAll = vi.fn().mockResolvedValue("new-commit-sha");
+  const push = vi.fn().mockResolvedValue(undefined);
 
   const loadConfig = vi.fn().mockResolvedValue(CONFIG);
   const exists = vi.fn().mockImplementation((path: string) =>
@@ -112,10 +122,10 @@ function buildTools(
       isAncestor,
       createBranch,
       // `createBranch` already checks out (§4.8); whether the build calls
-      // `checkout`/`push` on top is left unasserted — the spec pins neither.
+      // `checkout` on top is left unasserted — the spec pins neither.
       checkout: vi.fn().mockResolvedValue(undefined),
-      commitAll: unexpected("commitAll"),
-      push: vi.fn().mockResolvedValue(undefined),
+      commitAll,
+      push,
       pullFastForward: unexpected("pullFastForward"),
       rebase: unexpected("rebase"),
       deleteBranch: unexpected("deleteBranch"),
@@ -151,6 +161,8 @@ function buildTools(
       isAncestor,
       branchExists,
       createBranch,
+      commitAll,
+      push,
       loadConfig,
       exists,
       readFile,
@@ -212,6 +224,14 @@ describe("init: creates spec and quick branches", () => {
       "# Do a thing\n\nRef: AAA-001\n",
     );
 
+    // The scaffolded doc is committed and pushed on the new branch —
+    // queuing it up is purely mechanical by the time `init` runs.
+    expect(mocks.commitAll).toHaveBeenCalledWith(
+      "AAA-001: Do a thing",
+      expect.stringContaining("docs/tasks/AAA-001/task-AAA-001.md"),
+    );
+    expect(mocks.push).toHaveBeenCalledWith("spec/AAA-001");
+
     // --json reports the created canonical branch in the result object.
     const lines = stdout.trim().split("\n");
     expect(lines).toHaveLength(1);
@@ -243,6 +263,13 @@ describe("init: creates spec and quick branches", () => {
     expect(mocks.createBranch).toHaveBeenCalledWith("task/AAA-002", "main");
     expect(mocks.createBranch).not.toHaveBeenCalledWith("spec/AAA-002", expect.anything());
 
+    // Committed and pushed on the quick-route branch, same as the normal route.
+    expect(mocks.commitAll).toHaveBeenCalledWith(
+      "AAA-002: Do a small thing",
+      expect.stringContaining("docs/tasks/AAA-002/task-AAA-002.md"),
+    );
+    expect(mocks.push).toHaveBeenCalledWith("task/AAA-002");
+
     const lines = stdout.trim().split("\n");
     expect(lines).toHaveLength(1);
     const doc = JSON.parse(lines[0]) as {
@@ -273,6 +300,8 @@ describe("init: creates spec and quick branches", () => {
     expect(mocks.createBranch).not.toHaveBeenCalled();
     expect(mocks.mkdir).not.toHaveBeenCalled();
     expect(mocks.writeFile).not.toHaveBeenCalled();
+    expect(mocks.commitAll).not.toHaveBeenCalled();
+    expect(mocks.push).not.toHaveBeenCalled();
 
     // The refusal names both facts: work in progress, and no --wip given.
     expect(stdout).toMatch(/work in progress/i);
@@ -304,6 +333,8 @@ describe("init: creates spec and quick branches", () => {
 
     // The refusal happens before any branch or doc creation.
     expect(mocks.createBranch).not.toHaveBeenCalled();
+    expect(mocks.commitAll).not.toHaveBeenCalled();
+    expect(mocks.push).not.toHaveBeenCalled();
 
     // The message states main is not up to date with origin.
     expect(stdout).toMatch(/not up to date/i);
@@ -323,6 +354,8 @@ describe("init: creates spec and quick branches", () => {
 
     // Invalid argument — caught before any branch/doc creation is attempted.
     expect(mocks.createBranch).not.toHaveBeenCalled();
+    expect(mocks.commitAll).not.toHaveBeenCalled();
+    expect(mocks.push).not.toHaveBeenCalled();
 
     // The message states one of --title/--doc is required.
     expect(stdout).toContain("--title");
