@@ -162,6 +162,7 @@ const DEV_TESTING_TOOLS: Record<
       hasCommitsBeyond: ["branch", "parentBranch"],
       headCommitTitle: ["branch"],
       isDirty: [],
+      changedFiles: [],
       isAncestor: ["ancestor", "descendant"],
       createBranch: ["newBranch", "fromRef"],
       checkout: ["branch"],
