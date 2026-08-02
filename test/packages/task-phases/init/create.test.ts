@@ -90,6 +90,7 @@ function buildTools(
     headSha?: Mock;
     isAncestor?: Mock;
     branchExists?: Mock;
+    exists?: Mock;
   } = {},
 ): MockSet {
   const fetch = vi.fn().mockResolvedValue(undefined);
@@ -103,7 +104,7 @@ function buildTools(
   const push = vi.fn().mockResolvedValue(undefined);
 
   const loadConfig = vi.fn().mockResolvedValue(CONFIG);
-  const exists = vi.fn().mockImplementation((path: string) =>
+  const exists = overrides.exists ?? vi.fn().mockImplementation((path: string) =>
     Promise.resolve(path.startsWith("templates/")),
   );
   const readFile = vi.fn().mockResolvedValue(TEMPLATE);
@@ -320,6 +321,45 @@ describe("init: creates spec and quick branches", () => {
       expect.stringContaining("docs/tasks/AAA-007/task-AAA-007.md"),
     );
     expect(mocks.push).toHaveBeenCalledWith("task/AAA-007");
+  });
+
+  it("never overwrites an existing task doc — creates the branch but leaves the doc untouched", async () => {
+    const existsWithDoc = vi.fn().mockImplementation((path: string) =>
+      Promise.resolve(
+        path.startsWith("templates/") ||
+          path === "docs/tasks/AAA-008" ||
+          path === "docs/tasks/AAA-008/task-AAA-008.md",
+      ),
+    );
+    const { tools, mocks } = buildTools({ exists: existsWithDoc });
+    const cap = captureStdout();
+    const code = await run(
+      ["node", "cli.js", "init", "AAA-008", "--title", "Do a thing", "--commit", "--json"],
+      tools,
+    );
+    const stdout = cap.stdout();
+    cap.restore();
+
+    expect(code).toBe(0);
+
+    // The branch is still created — only the doc write is skipped.
+    expect(mocks.createBranch).toHaveBeenCalledWith("spec/AAA-008", "main");
+    expect(mocks.mkdir).not.toHaveBeenCalled();
+    expect(mocks.writeFile).not.toHaveBeenCalled();
+
+    // Nothing to commit either — the branch alone needs no commit, and
+    // --commit is a no-op here rather than an empty/no-op commit attempt.
+    expect(mocks.commitAll).not.toHaveBeenCalled();
+    expect(mocks.push).not.toHaveBeenCalled();
+
+    const lines = stdout.trim().split("\n");
+    const doc = JSON.parse(lines[0]) as {
+      result: { taskDocPath: string; committed: boolean };
+      success: boolean;
+    };
+    expect(doc.result.taskDocPath).toBe("docs/tasks/AAA-008/task-AAA-008.md");
+    expect(doc.result.committed).toBe(false);
+    expect(doc.success).toBe(true);
   });
 
   it("refuses init outright when there is work in progress and no --wip (§3.3)", async () => {

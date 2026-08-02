@@ -6,17 +6,18 @@ import { scaffoldTaskDoc } from "../lib/task-doc.js";
  * see task-phasing-lld.md §3.8. Implements spec 05: the happy path of both
  * branch-creation routes (normal -> `spec/{ref}`, `--quick` ->
  * `task/{ref}`), each scaffolding `docs/tasks/{ref}/task-{ref}.md` from the
- * template with `${ref}`/`${title}` substituted (`lib/task-doc.ts`, LLD
- * §4.6), plus the pre-flight blocks that must pass before any branch is
- * created: a dirty worktree with no `--wip` (unconditional, §3.14), `main`
- * behind `origin/main`, and a missing `--title`/`--doc` (invalid argument,
- * exit 2). `--commit` then commits and pushes the scaffolded doc on the
- * new branch — opt-in, not automatic, so the scaffold can be reviewed
- * before anything is pushed; without it `init` leaves the doc uncommitted
- * on the new branch for the caller to inspect and commit by hand.
+ * template with `${ref}`/`${title}` substituted — never overwriting an
+ * existing task doc (`lib/task-doc.ts`, LLD §4.6/§3.8) — plus the
+ * pre-flight blocks that must pass before any branch is created: a dirty
+ * worktree with no `--wip` (unconditional, §3.14), `main` behind
+ * `origin/main`, and a missing `--title`/`--doc` (invalid argument, exit
+ * 2). `--commit` then commits and pushes the scaffolded doc on the new
+ * branch — opt-in, not automatic, so the scaffold can be reviewed before
+ * anything is pushed; without it `init` leaves the doc uncommitted on the
+ * new branch for the caller to inspect and commit by hand.
  *
  * The `--doc`/`--specs` conveniences, `--wip`-carried-forward, and the
- * existing-doc/reusable-branch decision tree land with MAG-46-18. */
+ * existing-branch-reuse decision tree land with MAG-46-18. */
 
 export async function init(
   tools: ExternalTools,
@@ -79,20 +80,23 @@ export async function init(
 
   await tools.git.createBranch(canonicalBranch, "main");
 
-  const { taskDocPath } = await scaffoldTaskDoc(tools, ref, title);
+  const { taskDocPath, written } = await scaffoldTaskDoc(tools, ref, title);
 
   const messages = [
     `Current branch \`${currentBranch}\` - ref: ${ref}`,
     `New task \`${ref}\` initialised on \`${canonicalBranch}\``,
-    `Task doc: ${taskDocPath}`,
+    written
+      ? `Task doc: ${taskDocPath}`
+      : `Task doc already exists, left untouched: ${taskDocPath}`,
   ];
 
   // `--commit` is opt-in: by the time `init` runs the design workflow that
   // produced the doc(s) is already finished, so committing/pushing is
   // purely mechanical — but that's still a push to a shared remote, so it
   // only happens when explicitly asked for, not unconditionally on every
-  // scaffold.
-  const commit = args.commit === true;
+  // scaffold. Nothing to commit at all when the doc already existed and
+  // was left untouched — the branch alone needs no commit of its own.
+  const commit = args.commit === true && written;
   if (commit) {
     const commitTitle = `${ref}: ${title ?? "New task"}`;
     const commitMessage = `Task doc: ${taskDocPath}`;
