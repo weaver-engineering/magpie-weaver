@@ -67,7 +67,7 @@ describe("test-gate", () => {
       expect(inspectors.git.currentBranch).toHaveBeenCalled();
     });
 
-    it("defaults destination-branch to main when not provided", async () => {
+    it("defaults destination-branch to origin/main when not provided", async () => {
       const mockMergeBase = inspectors.git.mergeBase as ReturnType<typeof vi.fn>;
       mockMergeBase.mockResolvedValue("merge-base-sha");
 
@@ -92,7 +92,7 @@ describe("test-gate", () => {
       const result = await fn(inspectors, {});
 
       expect(result.passed).toBe(true);
-      expect(mockMergeBase).toHaveBeenCalledWith("HEAD", "main");
+      expect(mockMergeBase).toHaveBeenCalledWith("HEAD", "origin/main");
     });
   });
 

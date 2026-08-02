@@ -117,7 +117,7 @@ describe("main-gate", () => {
       expect(result.check).toBe("main-gate");
     });
 
-    it("defaults destination-branch to main when not provided", async () => {
+    it("defaults destination-branch to origin/main when not provided", async () => {
       setupBuildSuccess(inspectors);
       setupCoverageMocks(inspectors);
 
