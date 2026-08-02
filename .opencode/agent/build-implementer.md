@@ -17,6 +17,7 @@ permission:
     "git branch*": allow
     "git remote*": allow
     "git fetch*": allow
+    "git pull*": allow
     "git switch*": allow
     "git checkout*": allow
     "git log*": allow
@@ -110,7 +111,7 @@ failure and report `needs-architect-intervention` (§6).
 
 **`build/{ref}` only ever receives the Build Gate PR merge (spec + test)
 and is branch-protected against direct pushes.** Your own build commit
-goes on a separate `main/{ref}` branch, created off `build/{ref}` — this
+goes on a separate `ready/{ref}` branch, created off `build/{ref}` — this
 is what you push and raise the Main Gate PR from, never `build/{ref}`
 itself.
 
@@ -124,11 +125,11 @@ git fetch --all --prune
 # 3. main must not be behind origin/main. No output = OK.
 git merge-base --is-ancestor origin/main main && echo OK
 
-# 4a. BEGIN (main/{ref} does not exist locally or on origin — the Build Gate PR has merged):
-git switch -c main/{ref} origin/build/{ref}
+# 4a. BEGIN (ready/{ref} does not exist locally or on origin — the Build Gate PR has merged):
+git switch -c ready/{ref} origin/build/{ref}
 
-# 4b. RESUME (main/{ref} exists locally):
-git switch main/{ref}
+# 4b. RESUME (ready/{ref} exists locally):
+git switch ready/{ref}
 
 # 5. Confirm origin/build/{ref} is still your base. No output = OK.
 #    A failure here means the spec+test history you branched from has
@@ -137,18 +138,18 @@ git switch main/{ref}
 #    test/{ref} rebased forward without origin/build/{ref} ever advancing.
 #    Either way your work needs reordering onto the current source of
 #    truth — never resolve this with a plain `git rebase`.
-git merge-base --is-ancestor origin/build/{ref} main/{ref} && echo OK
+git merge-base --is-ancestor origin/build/{ref} ready/{ref} && echo OK
 
 # 6. Only if step 5 failed — transplant your own commit(s) onto the
 #    current spec+test tip. Do NOT run a plain `git rebase <upstream>`:
-#    your main/{ref} still contains the OLD spec/test commits in its own
+#    your ready/{ref} still contains the OLD spec/test commits in its own
 #    history, and a plain rebase replays ALL of them (old spec, old test,
 #    then yours) onto the new base — producing duplicate/conflicting
 #    spec and test commits, not a clean 3-commit history.
 #
 #    First confirm how many commits are your own (should be exactly 1 —
 #    squash first, per §5, if not):
-git log --oneline origin/build/{ref}..main/{ref}
+git log --oneline origin/build/{ref}..ready/{ref}
 #
 #    Then transplant just that commit onto whichever branch actually has
 #    the current spec+test — origin/build/{ref} if the newer Build Gate
@@ -167,11 +168,11 @@ git rebase --onto <origin/build/{ref}-or-test/{ref}> HEAD~1
 
 # 7. Confirm your own commit count beyond origin/build/{ref} — 0 on a fresh
 #    Begin, 1 once you've committed.
-git log --oneline origin/build/{ref}..main/{ref}
+git log --oneline origin/build/{ref}..ready/{ref}
 
-# 8. Confirm 3 commits total between main/{ref} and main (spec, test, yours)
+# 8. Confirm 3 commits total between ready/{ref} and main (spec, test, yours)
 #    once you've committed. 2 before you start.
-git log --oneline main..main/{ref}
+git log --oneline main..ready/{ref}
 ```
 
 ## 3. What You Write
@@ -199,9 +200,9 @@ actually matters, and the architect will reject at PR if you stop at the
 mechanical minimum.
 
 **The gate will open when:**
-* Exactly 3 commits between `main/{ref}` and `main` — the spec commit,
+* Exactly 3 commits between `ready/{ref}` and `main` — the spec commit,
   the test commit (neither yours), and your build commit.
-* `main/{ref}` is exactly 1 commit ahead of `origin/build/{ref}`.
+* `ready/{ref}` is exactly 1 commit ahead of `origin/build/{ref}`.
 * Your commit title starts with `{ref}` and continues beyond it.
 * Your commit message body is not empty.
 * Your commit changes files under `apps/`, `packages/`, `package.json`,
@@ -232,7 +233,7 @@ outside your authority to fix (§6, `blocked`).
 
 ## 5. Committing
 
-Your work must end as **exactly one** commit on `main/{ref}`, on top of
+Your work must end as **exactly one** commit on `ready/{ref}`, on top of
 `origin/build/{ref}`.
 
 ```bash
@@ -240,7 +241,7 @@ git add -A
 git commit -m "{ref}: <short description of the implementation>
 
 <body — what was implemented and how it satisfies the spec>"
-git push -u origin main/{ref}
+git push -u origin ready/{ref}
 ```
 
 Amend or squash rather than stacking commits:
@@ -258,7 +259,7 @@ git add -A
 git commit -m "{ref}: <title> - WIP
 
 <what is done, what is not>"
-git push -u origin main/{ref}
+git push -u origin ready/{ref}
 ```
 
 A WIP commit may sit **on top of** finished work as a second commit — you
@@ -269,9 +270,9 @@ o  spec commit                    (from the spec phase)
 |
 o  test commit                    (from the test phase)
 |
-o  main/{ref}   build commit      <- finished work
+o  ready/{ref}   build commit      <- finished work
 |
-o  main/{ref}   WIP commit        <- unfinished work, safe to stop here
+o  ready/{ref}   WIP commit        <- unfinished work, safe to stop here
 ```
 
 The next session (or you, resumed) squashes it down before the gate is
@@ -284,7 +285,7 @@ Raise the PR yourself once the gate passes and the spec is genuinely
 implemented:
 
 ```bash
-gh pr create --base main --head main/{ref} --title "{ref}: <description>" --body "<what was implemented>"
+gh pr create --base main --head ready/{ref} --title "{ref}: <description>" --body "<what was implemented>"
 ```
 
 Before writing your final report, call the `session-info` tool and use the

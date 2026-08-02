@@ -756,6 +756,55 @@ merged). `test-writer.md`/`quick-scaffolder.md` are unaffected —
 `test-writer` still creates `build/{ref}` and raises the Build Gate PR
 into it exactly as before; only the phase after that changes.
 
+**Correction (§3aq):** `main/{ref}` was never actually usable — git
+cannot create it once `main` itself exists as a branch. Renamed to
+`ready/{ref}` throughout; see §3aq.
+
+## 3ap. `"git pull*"` was missing entirely
+
+`build-implementer`, resuming the spec 06.01 build phase after
+`build/{ref}` was rebased onto a newer `main` mid-session (a gate-checks
+coverage-inspector fix), ran `git pull --ff-only origin build/{ref}` to
+pick up the rebase — only `git merge --ff-only*` (§3ag) had ever been
+added; `git pull` is a distinct subcommand from `git merge`/`git fetch`
+and had no entry of its own. Same already-established policy as every
+other read-then-fast-forward git operation in this list: it either
+fast-forwards cleanly or fails outright, never silently discarding work.
+Added `"git pull*"` to all three agents, alongside `git fetch*`.
+
+## 3aq. `main/{ref}` (§3ao) renamed to `ready/{ref}` — the original name
+was never actually usable
+
+Resuming the spec 06.01 build phase after the `git pull*` gap above was
+fixed, `build-implementer` tried `git switch -c main/{ref}
+origin/build/{ref}` per §2 step 4a and hit `fatal: cannot lock ref
+'refs/heads/main/MAG-46': 'refs/heads/main' exists; cannot create
+'refs/heads/main/MAG-46'` — not a permission gap, a genuine git
+limitation. Git stores branches hierarchically under `refs/heads/`, so a
+branch named `main` and a branch named `main/anything` can never coexist
+in the same repository (`refs/heads/main` would have to be both a file
+and a directory) — true locally and on GitHub identically, and true
+regardless of loose vs. packed refs (the agent's own working theory,
+confirmed and ruled out by inspecting `.git/refs/heads/` and
+`.git/packed-refs` directly). `main/{ref}` was chosen in §3ao without
+ever actually creating one in a repo with a real `main` branch present —
+every verification up to that point used `--head-ref main/{ref}` as a
+`gate-check` CLI argument override, or a mocked `git.currentBranch()` in
+tests, neither of which ever calls `git branch`/`git switch -c` for
+real.
+
+Renamed to `ready/{ref}` throughout — reads as "ready to merge to
+`main`", and no branch named `ready` exists to collide with. Updated
+`build-implementer.md` (§2, §4, §5, §6 — same sections §3ao touched),
+`packages/gate-checks/src/checks/main-gate.ts` (the full-route branch
+pattern and its violation message), `main-gate.test.ts`, and
+`main-gate.yaml`'s trigger condition (`task/MAG-30`) — see `task/MAG-30`
+for that half. The `branch-naming-policy` GitHub ruleset's
+`refs/heads/main/**` creation exception (dead weight, since that branch
+could never be created anyway) was swapped for `refs/heads/ready/**`,
+without which `ready/{ref}` branches would themselves be blocked from
+creation.
+
 ## 4. Explicitly out of scope
 
 - `.opencode/tool/task-phases.ts` — **not** created. Per
