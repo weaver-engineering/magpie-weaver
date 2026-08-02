@@ -10,11 +10,14 @@ permission:
     "pnpm-lock.yaml": allow
     "packages/**/*.interface.ts": deny
     "test/**": deny
+  external_directory:
+    "/Users/simon/weaver-engineering/MagpieWeaver/magpie-weaver*": allow
   bash:
     "*": ask
     "git status*": allow
     "git rev-parse*": allow
     "git branch*": allow
+    "git worktree*": allow
     "git remote*": allow
     "git fetch*": allow
     "git pull*": allow
@@ -30,6 +33,7 @@ permission:
     "git config*": allow
     "git check-ignore*": allow
     "git add*": allow
+    "git rm*": allow
     "git commit*": allow
     "git push*": allow
     "git ls-files*": allow
@@ -40,12 +44,15 @@ permission:
     "git tag*": allow
     "git rev-list*": allow
     "git ls-tree*": allow
+    "git for-each-ref*": allow
+    "git -C*": allow
     "gh pr create*": allow
     "gh pr list*": allow
     "gh pr view*": allow
     "gh pr diff*": allow
     "gh pr checks*": allow
     "gh run list*": allow
+    "gh run download*": allow
     "gh pr edit*": allow
     "gh pr close*": allow
     "gh pr comment*": allow
@@ -61,16 +68,21 @@ permission:
     "gh api repos/weaver-engineering/magpie-weaver/pulls/*/comments*": allow
     "gh api repos/weaver-engineering/magpie-weaver/collaborators/*/permission*": allow
     "gh api -X POST repos/weaver-engineering/magpie-weaver/pulls/*/requested_reviewers*": allow
+    "gh api repos/weaver-engineering/magpie-weaver/branches/*/protection*": allow
     "pnpm gate-check*": allow
     "pnpm test*": allow
     "pnpm --filter*": allow
+    "pnpm -r build*": allow
     "pnpm install*": allow
     "pnpm exec eslint*": allow
     "pnpm exec vitest*": allow
+    "pnpm exec task*": allow
     "pnpm vitest*": allow
+    "timeout *": allow
     "sed -n*": allow
-    "python3 -*": allow
+    "python3*": allow
     "rm -rf*": allow
+    "rm -f*": allow
     "node *": allow
     "git reset --hard*": allow
     "perl -pi*": allow
@@ -81,7 +93,9 @@ permission:
     "wc *": allow
     "tr *": allow
     "cat *": allow
+    "diff *": allow
     "echo *": allow
+    "printf *": allow
     "find *": allow
     "true *": allow
     "date *": allow
@@ -89,6 +103,8 @@ permission:
     "base64 *": allow
     "ls *": allow
     "mkdir *": allow
+    "cd *": allow
+    "stat *": allow
 ---
 
 # `build-implementer` — Standing Instructions

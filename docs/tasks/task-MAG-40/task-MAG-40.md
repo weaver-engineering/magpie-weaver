@@ -805,6 +805,93 @@ could never be created anyway) was swapped for `refs/heads/ready/**`,
 without which `ready/{ref}` branches would themselves be blocked from
 creation.
 
+## 3ar. `"timeout *"` and the `"python3 -*"` glob were both too narrow
+
+`test-writer`, writing MAG-46 spec 07's tests, hit two gaps in the same
+session. First, `timeout 110 pnpm exec vitest run --coverage ...` —
+wrapping the coverage run in a bound so it can't hang indefinitely is a
+reasonable thing to do on its own initiative, but `timeout` had no entry
+at all; only the wrapped `pnpm exec vitest*` command matched anything.
+Added `"timeout *"` to all three agents, alongside `pnpm vitest*`.
+
+Second, a bare `python3` invocation (piped via stdin/heredoc, not
+`python3 -c "..."`) didn't match `"python3 -*"` — that glob only ever
+covered the inline `-c` form. Widened to `"python3*"`, covering both the
+inline-code and piped-stdin/script-file forms; same already-established
+policy as every other interpreter allowance in this list (`node *`,
+`perl -pi*`) — a scripting language runtime with no destructive variant
+of its own.
+
+Also confirmed the underlying cause of these two turning into a genuine
+stuck-session deadlock rather than an ordinary retry: sending a new
+prompt right after fixing the permission config gets queued behind the
+still-open permission request rather than pre-empting it, and once that
+request has expired server-side the queued prompt never actually runs —
+`interrupt` doesn't clear this either. The fix that actually works is
+fixing the config *before* the model's next tool call is evaluated
+against it, not fixing it reactively after the model is already blocked
+waiting on a specific request object that's since expired.
+
+## 3as. `"pnpm -r build*"` and `"rm -f*"` were both missing entirely
+
+`build-implementer`, verifying the real `changedFiles()` implementation
+for MAG-46 spec 07, hit two more gaps in the same session. `pnpm -r
+build` (rebuilding every workspace package after adding the real
+`GitTool.changedFiles`) matched nothing — `pnpm --filter*` covers a
+single package, not the repo-wide `-r` form. Added `"pnpm -r build*"`,
+alongside `pnpm --filter*`.
+
+`rm -f /dev/null` (clearing a scratch file as part of its own
+`--dev-testing` fixture setup) didn't match `"rm -rf*"` — that glob only
+ever covered the recursive-force form, not the plain-force single-file
+form. Added `"rm -f*"`, alongside `rm -rf*` — same already-established
+policy: force-removing a specific, non-wildcard path is no more
+dangerous than the recursive form already allowed.
+
+Also the first real confirmation of §3ar's fix-before-reply lesson in
+practice: rather than `interrupt` + a retry prompt (confirmed unreliable
+there) or replying to the specific pending request via the API
+(confirmed unreliable too — the request object expires server-side
+within a few seconds, faster than the config-fix-then-reply round trip
+takes even done as fast as possible), the config fix went in immediately
+and the human running the live session's local CLI clicked "allow"
+directly — the CLI apparently still sees the live prompt even after the
+API-side request object has already expired. This is now the standing
+recovery workflow for this class of gap, not a one-off.
+
+## 3at. `"git rm*"` was missing entirely
+
+`build-implementer`, building a real `--dev-testing` fixture for
+`changedFiles()`'s deleted-file case, ran `git rm -q base.txt` and `git
+rm -q --cached deleted-later.txt` to simulate a deletion — `git rm` had
+no entry at all, despite `git add*`/`git commit*` both already being
+allowed and no more dangerous (it removes a file from the working tree
+and/or index, exactly the counterpart operation to `git add`). Added
+`"git rm*"` to all three agents, alongside `git add*`.
+
+## 3au. `"git worktree*"` and `"diff *"` were both missing entirely
+
+`test-writer`, starting MAG-46 spec 08, ran `git worktree list` (checking
+for stray worktrees before starting) and `diff <(git show
+HEAD:...) <(...)` (comparing the committed spec doc against the
+architect's source copy in `magpieweaver-docs`) — both read-only,
+informational commands with no entry at all. `git worktree*` is no more
+capable of mutation than `git branch*` already allowed (`list`/`add`
+create no commits; the destructive `remove`/`prune` forms aren't
+meaningfully different from `git branch -D`, already implicitly trusted
+via other allowed git commands). `diff` is the same class of read-only
+utility as `head`/`tail`/`grep`/`cat`, already allowed. Added
+`"git worktree*"` alongside `git branch*`, and `"diff *"` alongside
+`cat *`.
+
+## 3av. `"printf *"` was missing entirely
+
+`test-writer`, building the real `--dev-testing gate-check` fixtures for
+MAG-46 spec 08, used `printf '{"phase": "spec"}'` to feed JSON into the
+CLI's `-i` stdin mode — `printf` had no entry at all despite `echo *`
+already being allowed and no more capable of anything beyond formatted
+text output. Added `"printf *"` alongside `echo *`.
+
 ## 4. Explicitly out of scope
 
 - `.opencode/tool/task-phases.ts` — **not** created. Per
