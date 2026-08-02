@@ -196,8 +196,15 @@ export class CoverageInspectorImpl implements CoverageInspector {
       if (!coverage) continue;
 
       for (const lineNum of lineNumbers) {
+        // Comments, blank lines, and pure data literals never get a DA:
+        // record from lcov at all — they're not instrumentable, so no
+        // test could ever make them "covered". Only count a new line
+        // toward the denominator if lcov actually instrumented it;
+        // otherwise a documentation-heavy diff tanks this metric for
+        // lines that were never executable in the first place.
+        if (!coverage.instrumentable.has(lineNum)) continue;
         totalNewLines++;
-        if (coverage.has(lineNum)) {
+        if (coverage.covered.has(lineNum)) {
           coveredNewLines++;
         }
       }
@@ -234,21 +241,29 @@ export class CoverageInspectorImpl implements CoverageInspector {
     return undefined;
   }
 
+  /** For each file, `instrumentable` is every line lcov emitted a `DA:`
+   * record for (i.e. every line the coverage tool considered executable),
+   * and `covered` is the subset of those with a nonzero hit count.
+   * Comment lines, blank lines, and other non-executable lines never get
+   * a `DA:` record, so they appear in neither set. */
   private parseLcov(
     lcovContent: string,
-  ): Record<string, Set<number>> {
-    const files: Record<string, Set<number>> = {};
+  ): Record<string, { instrumentable: Set<number>; covered: Set<number> }> {
+    const files: Record<string, { instrumentable: Set<number>; covered: Set<number> }> = {};
     let currentFile = "";
 
     for (const line of lcovContent.split("\n")) {
       if (line.startsWith("SF:")) {
         currentFile = line.slice(3);
-        files[currentFile] = new Set();
+        files[currentFile] = { instrumentable: new Set(), covered: new Set() };
       } else if (line.startsWith("DA:")) {
         const [, data] = line.split(":");
         const [lineNum, hitCount] = data.split(",");
-        if (currentFile && parseInt(hitCount) > 0) {
-          files[currentFile].add(parseInt(lineNum));
+        if (currentFile) {
+          files[currentFile].instrumentable.add(parseInt(lineNum));
+          if (parseInt(hitCount) > 0) {
+            files[currentFile].covered.add(parseInt(lineNum));
+          }
         }
       }
     }
