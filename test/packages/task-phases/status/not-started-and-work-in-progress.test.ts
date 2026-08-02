@@ -4,6 +4,16 @@
  * derivation pipeline (task-MAG-46-06-status-not-started-and-work-
  * progress-spec.md, LLD §3.9).
  *
+ * Correction (post-MAG-46-09): `deriveState()` is one shared function with
+ * no ref-specific branching, so a non-WIP-marked branch with commits
+ * cannot report `work-in-progress` here and `ready?` once MAG-46-09 lands
+ * — the two are mutually exclusive for the identical input. `ready?`'s
+ * real reachability condition (commits exist, no WIP marker, no PR
+ * raised) supersedes this chunk's own placeholder expectation for that
+ * same case. The non-WIP scenarios below (formerly "work-in-progress")
+ * now expect `ready?`; only the genuinely WIP-marked scenario is actually
+ * about `work-in-progress` and is unaffected.
+ *
  * Same in-process pattern as spec 04: `run(argv, tools)` is called directly
  * with an injected `ExternalTools` whose `git`/`github` members are test
  * doubles — no real git/gh/fs calls anywhere. `findMergedPR`/`findOpenPR`
@@ -16,8 +26,8 @@
  *
  * Every one of these tests fails against the pre-implementation codebase:
  * `status` currently throws "not implemented" whenever any phase branch
- * exists, so the derived `not-started`/`work-in-progress` result — and the
- * exit-0 contract — can't be produced yet.
+ * exists, so the derived `not-started`/`ready?`/`work-in-progress` result
+ * — and the exit-0 contract — can't be produced yet.
  */
 
 // Implements: task-MAG-46-06-status-not-started-and-work-in-progress-spec.md
@@ -195,7 +205,7 @@ describe("status: not-started / work-in-progress", () => {
     expect(mocks.headCommitTitle).not.toHaveBeenCalled();
   });
 
-  it("reports spec/work-in-progress when spec/{ref} has commits, head not WIP (§3.2)", async () => {
+  it("reports spec/ready? when spec/{ref} has commits, head not WIP (§3.2)", async () => {
     const { tools, mocks } = buildTools({
       branchExists: existsOnly("spec/AAA-002"),
       hasCommitsBeyond: vi.fn().mockResolvedValue(true),
@@ -207,7 +217,9 @@ describe("status: not-started / work-in-progress", () => {
     cap.restore();
 
     expect(code).toBe(0);
-    expect(stdout).toContain("Task::Phase::State AAA-002::spec::work-in-progress");
+    // Correction (post-MAG-46-09): commits exist, head not WIP-marked, no
+    // PR raised — ready?, not work-in-progress (see file-level comment).
+    expect(stdout).toContain("Task::Phase::State AAA-002::spec::ready?");
 
     expect(mocks.hasCommitsBeyond).toHaveBeenCalledWith("spec/AAA-002", "main");
     expect(mocks.headCommitTitle).toHaveBeenCalledWith("spec/AAA-002");
@@ -229,7 +241,7 @@ describe("status: not-started / work-in-progress", () => {
     expect(mocks.headCommitTitle).not.toHaveBeenCalled();
   });
 
-  it("reports quick/work-in-progress for the task/{ref} route with commits (§3.4)", async () => {
+  it("reports quick/ready? for the task/{ref} route with commits (§3.4)", async () => {
     const { tools, mocks } = buildTools({
       branchExists: existsOnly("task/AAA-004"),
       hasCommitsBeyond: vi.fn().mockResolvedValue(true),
@@ -241,7 +253,8 @@ describe("status: not-started / work-in-progress", () => {
     cap.restore();
 
     expect(code).toBe(0);
-    expect(stdout).toContain("Task::Phase::State AAA-004::quick::work-in-progress");
+    // Correction (post-MAG-46-09): see file-level comment.
+    expect(stdout).toContain("Task::Phase::State AAA-004::quick::ready?");
 
     expect(mocks.hasCommitsBeyond).toHaveBeenCalledWith("task/AAA-004", "main");
     expect(mocks.headCommitTitle).toHaveBeenCalledWith("task/AAA-004");
@@ -263,7 +276,8 @@ describe("status: not-started / work-in-progress", () => {
 
     expect(code).toBe(0);
     // phase is `spec`, not `test`, even though test/AAA-006 exists.
-    expect(stdout).toContain("Task::Phase::State AAA-006::spec::work-in-progress");
+    // Correction (post-MAG-46-09): see file-level comment.
+    expect(stdout).toContain("Task::Phase::State AAA-006::spec::ready?");
 
     // The fallback trigger is the failed ancestry check spec -> test.
     expect(mocks.isAncestor).toHaveBeenCalledWith("spec/AAA-006", "test/AAA-006");
