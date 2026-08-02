@@ -11,6 +11,7 @@ permission:
     "git status*": allow
     "git rev-parse*": allow
     "git branch*": allow
+    "git worktree*": allow
     "git remote*": allow
     "git fetch*": allow
     "git pull*": allow
@@ -26,6 +27,7 @@ permission:
     "git config*": allow
     "git check-ignore*": allow
     "git add*": allow
+    "git rm*": allow
     "git commit*": allow
     "git push*": allow
     "git ls-files*": allow
@@ -60,13 +62,16 @@ permission:
     "pnpm gate-check*": allow
     "pnpm test*": allow
     "pnpm --filter*": allow
+    "pnpm -r build*": allow
     "pnpm install*": allow
     "pnpm exec eslint*": allow
     "pnpm exec vitest*": allow
     "pnpm vitest*": allow
+    "timeout *": allow
     "sed -n*": allow
-    "python3 -*": allow
+    "python3*": allow
     "rm -rf*": allow
+    "rm -f*": allow
     "node *": allow
     "git reset --hard*": allow
     "perl -pi*": allow
@@ -77,7 +82,9 @@ permission:
     "wc *": allow
     "tr *": allow
     "cat *": allow
+    "diff *": allow
     "echo *": allow
+    "printf *": allow
     "find *": allow
     "true *": allow
     "date *": allow
