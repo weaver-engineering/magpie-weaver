@@ -17,7 +17,6 @@ permission:
     "git status*": allow
     "git rev-parse*": allow
     "git branch*": allow
-    "git worktree*": allow
     "git remote*": allow
     "git fetch*": allow
     "git pull*": allow
@@ -33,7 +32,6 @@ permission:
     "git config*": allow
     "git check-ignore*": allow
     "git add*": allow
-    "git rm*": allow
     "git commit*": allow
     "git push*": allow
     "git ls-files*": allow
@@ -44,6 +42,8 @@ permission:
     "git tag*": allow
     "git rev-list*": allow
     "git ls-tree*": allow
+    "git worktree*": allow
+    "git rm*": allow
     "git for-each-ref*": allow
     "git -C*": allow
     "gh pr create*": allow
@@ -72,12 +72,12 @@ permission:
     "pnpm gate-check*": allow
     "pnpm test*": allow
     "pnpm --filter*": allow
-    "pnpm -r build*": allow
     "pnpm install*": allow
     "pnpm exec eslint*": allow
     "pnpm exec vitest*": allow
     "pnpm exec task*": allow
     "pnpm vitest*": allow
+    "pnpm -r build*": allow
     "timeout *": allow
     "sed -n*": allow
     "python3*": allow
@@ -138,8 +138,11 @@ git status --porcelain
 # 2. Get current remote state.
 git fetch --all --prune
 
-# 3. main must not be behind origin/main. No output = OK.
-git merge-base --is-ancestor origin/main main && echo OK
+# 3. Advance local main to match origin/main. Local main does not track
+#    the remote automatically, and other worktrees/sessions sharing this
+#    checkout can leave it stale — anything that reasons about local
+#    main (yours or a human's) should not trust it without this.
+git branch -f main origin/main
 
 # 4a. BEGIN (ready/{ref} does not exist locally or on origin — the Build Gate PR has merged):
 git switch -c ready/{ref} origin/build/{ref}
