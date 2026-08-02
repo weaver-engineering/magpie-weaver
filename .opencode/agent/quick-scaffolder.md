@@ -17,6 +17,7 @@ permission:
     "git branch*": allow
     "git remote*": allow
     "git fetch*": allow
+    "git pull*": allow
     "git switch*": allow
     "git checkout*": allow
     "git log*": allow
