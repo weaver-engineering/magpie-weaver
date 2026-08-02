@@ -19,10 +19,11 @@
  * to whatever the implementation's own defaults happen to be.
  *
  * `commitAll`/`push` were originally `unexpected`/unasserted here — a
- * quick-route task/MAG-46 commit revised that: `init` now commits and
- * pushes the scaffolded doc itself (queuing it up is purely mechanical by
- * the time `init` runs), so both are now benign mocks the happy-path tests
- * assert against directly.
+ * quick-route task/MAG-46 commit revised that: `init` now supports
+ * `--commit` to commit and push the scaffolded doc itself, opt-in rather
+ * than automatic, so both are now benign mocks. The happy-path tests
+ * (§3.1/§3.2) assert neither is called by default; separate tests below
+ * cover `--commit` actually triggering them.
  */
 
 // Implements: task-MAG-46-05-init-creates-spec-and-quick-branches-spec.md
@@ -224,22 +225,20 @@ describe("init: creates spec and quick branches", () => {
       "# Do a thing\n\nRef: AAA-001\n",
     );
 
-    // The scaffolded doc is committed and pushed on the new branch —
-    // queuing it up is purely mechanical by the time `init` runs.
-    expect(mocks.commitAll).toHaveBeenCalledWith(
-      "AAA-001: Do a thing",
-      expect.stringContaining("docs/tasks/AAA-001/task-AAA-001.md"),
-    );
-    expect(mocks.push).toHaveBeenCalledWith("spec/AAA-001");
+    // Without --commit, nothing is committed or pushed — the scaffold is
+    // left for the caller to inspect and commit by hand.
+    expect(mocks.commitAll).not.toHaveBeenCalled();
+    expect(mocks.push).not.toHaveBeenCalled();
 
     // --json reports the created canonical branch in the result object.
     const lines = stdout.trim().split("\n");
     expect(lines).toHaveLength(1);
     const doc = JSON.parse(lines[0]) as {
-      result: { canonicalBranch: string };
+      result: { canonicalBranch: string; committed: boolean };
       success: boolean;
     };
     expect(doc.result.canonicalBranch).toBe("spec/AAA-001");
+    expect(doc.result.committed).toBe(false);
     expect(doc.success).toBe(true);
   });
 
@@ -263,21 +262,64 @@ describe("init: creates spec and quick branches", () => {
     expect(mocks.createBranch).toHaveBeenCalledWith("task/AAA-002", "main");
     expect(mocks.createBranch).not.toHaveBeenCalledWith("spec/AAA-002", expect.anything());
 
-    // Committed and pushed on the quick-route branch, same as the normal route.
-    expect(mocks.commitAll).toHaveBeenCalledWith(
-      "AAA-002: Do a small thing",
-      expect.stringContaining("docs/tasks/AAA-002/task-AAA-002.md"),
-    );
-    expect(mocks.push).toHaveBeenCalledWith("task/AAA-002");
+    // Without --commit, nothing is committed or pushed on the quick route
+    // either — same default as the normal route.
+    expect(mocks.commitAll).not.toHaveBeenCalled();
+    expect(mocks.push).not.toHaveBeenCalled();
 
     const lines = stdout.trim().split("\n");
     expect(lines).toHaveLength(1);
     const doc = JSON.parse(lines[0]) as {
-      result: { canonicalBranch: string };
+      result: { canonicalBranch: string; committed: boolean };
       success: boolean;
     };
     expect(doc.result.canonicalBranch).toBe("task/AAA-002");
+    expect(doc.result.committed).toBe(false);
     expect(doc.success).toBe(true);
+  });
+
+  it("--commit commits and pushes the scaffolded doc", async () => {
+    const { tools, mocks } = buildTools();
+    const cap = captureStdout();
+    const code = await run(
+      ["node", "cli.js", "init", "AAA-006", "--title", "Do a thing", "--commit", "--json"],
+      tools,
+    );
+    const stdout = cap.stdout();
+    cap.restore();
+
+    expect(code).toBe(0);
+
+    expect(mocks.commitAll).toHaveBeenCalledWith(
+      "AAA-006: Do a thing",
+      expect.stringContaining("docs/tasks/AAA-006/task-AAA-006.md"),
+    );
+    expect(mocks.push).toHaveBeenCalledWith("spec/AAA-006");
+
+    const lines = stdout.trim().split("\n");
+    const doc = JSON.parse(lines[0]) as {
+      result: { committed: boolean };
+      success: boolean;
+    };
+    expect(doc.result.committed).toBe(true);
+    expect(doc.success).toBe(true);
+  });
+
+  it("--commit works on the --quick route too", async () => {
+    const { tools, mocks } = buildTools();
+    const cap = captureStdout();
+    const code = await run(
+      ["node", "cli.js", "init", "AAA-007", "--quick", "--title", "Do a small thing", "--commit"],
+      tools,
+    );
+    cap.restore();
+
+    expect(code).toBe(0);
+    expect(mocks.commitAll).toHaveBeenCalledWith(
+      "AAA-007: Do a small thing",
+      expect.stringContaining("docs/tasks/AAA-007/task-AAA-007.md"),
+    );
+    expect(mocks.push).toHaveBeenCalledWith("task/AAA-007");
   });
 
   it("refuses init outright when there is work in progress and no --wip (§3.3)", async () => {

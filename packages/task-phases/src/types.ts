@@ -88,6 +88,11 @@ export interface InitCommandResult extends TaskPhasingCommandResult {
   taskDocPath: string | null;
   specDocPaths: string[];
   wipCarriedForward: boolean;
+  /** whether `--commit` was given and the scaffolded doc was committed
+   * and pushed; `false` when the branch/doc exist but nothing was
+   * committed (either `--commit` was omitted, or nothing was created at
+   * all, e.g. a refusal) */
+  committed: boolean;
 }
 
 /** `status`-specific result data. */

@@ -175,6 +175,29 @@ a real process weakness (spec docs don't currently carry LLD-level
 structural detail down to the agent) worth fixing before more chunks
 land, not just this one instance of it.
 
+**`init`'s commit+push is now gated behind `--commit`** — quick-route
+commit (`task/MAG-46`). It was unconditional (PR #65); about to actually
+use `init` for real to raise spec 07 surfaced the difference between
+"queuing the doc up is purely mechanical" (still true) and "always
+pushing to a shared remote with no chance to look first" (not something
+that follows from the first). `InitCommandResult` gained a `committed:
+boolean` field so `--json` callers can tell which happened. Every prior
+chunk's spec commit (00 through 06.01) was still raised by hand, copying
+the spec doc directly onto `spec/MAG-46` — `init` was never actually used
+for one until now.
+
+**`spec/MAG-46` deleted and will be recreated per chunk going forward** —
+it was never cleared down after a chunk's Main Gate merge, unlike
+`test`/`build`/`ready/{ref}`, so it had drifted stale (missing every
+MAG-30/40 fix merged since 06.01 landed) and — more importantly — its
+mere existence is *why* `init MAG-46` refused outright ("Branch
+`spec/MAG-46` already exists"; the existing-branch-reuse decision tree is
+MAG-46-18's, not built yet). Its full content was already squashed into
+`main` through every chunk's Main Gate PR, so deleting it lost nothing.
+Same treatment as `test`/`build`/`ready/{ref}` from here on: gone right
+after each chunk merges, letting `init` create it fresh for the next one
+instead of needing a manual branch check first.
+
 ## Current Scope: spec 06.01
 
 **Working spec doc:**

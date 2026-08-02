@@ -2,17 +2,18 @@ import { UsageError } from "../errors.js";
 import type { ExternalTools, InitCommandResult } from "../types.js";
 import { scaffoldTaskDoc } from "../lib/task-doc.js";
 
-/** `pnpm task init <ref> [--quick] [--title <title>] [--json]` — see
- * task-phasing-lld.md §3.8. Implements spec 05: the happy path of both
+/** `pnpm task init <ref> [--quick] [--title <title>] [--commit] [--json]` —
+ * see task-phasing-lld.md §3.8. Implements spec 05: the happy path of both
  * branch-creation routes (normal -> `spec/{ref}`, `--quick` ->
  * `task/{ref}`), each scaffolding `docs/tasks/{ref}/task-{ref}.md` from the
  * template with `${ref}`/`${title}` substituted (`lib/task-doc.ts`, LLD
  * §4.6), plus the pre-flight blocks that must pass before any branch is
  * created: a dirty worktree with no `--wip` (unconditional, §3.14), `main`
  * behind `origin/main`, and a missing `--title`/`--doc` (invalid argument,
- * exit 2). The scaffolded doc is then committed and pushed on the new
- * branch — queuing it up is purely mechanical by the time `init` runs, so
- * there's no manual step left.
+ * exit 2). `--commit` then commits and pushes the scaffolded doc on the
+ * new branch — opt-in, not automatic, so the scaffold can be reviewed
+ * before anything is pushed; without it `init` leaves the doc uncommitted
+ * on the new branch for the caller to inspect and commit by hand.
  *
  * The `--doc`/`--specs` conveniences, `--wip`-carried-forward, and the
  * existing-doc/reusable-branch decision tree land with MAG-46-18. */
@@ -80,28 +81,35 @@ export async function init(
 
   const { taskDocPath } = await scaffoldTaskDoc(tools, ref, title);
 
-  // By the time `init` runs, the design workflow that produced the doc(s)
-  // just written is already finished — queuing them up is purely
-  // mechanical, so `init` commits and pushes them itself rather than
-  // leaving that as a manual step for every single task.
-  const commitTitle = `${ref}: ${title ?? "New task"}`;
-  const commitMessage = `Task doc: ${taskDocPath}`;
-  await tools.git.commitAll(commitTitle, commitMessage);
-  await tools.git.push(canonicalBranch);
+  const messages = [
+    `Current branch \`${currentBranch}\` - ref: ${ref}`,
+    `New task \`${ref}\` initialised on \`${canonicalBranch}\``,
+    `Task doc: ${taskDocPath}`,
+  ];
+
+  // `--commit` is opt-in: by the time `init` runs the design workflow that
+  // produced the doc(s) is already finished, so committing/pushing is
+  // purely mechanical — but that's still a push to a shared remote, so it
+  // only happens when explicitly asked for, not unconditionally on every
+  // scaffold.
+  const commit = args.commit === true;
+  if (commit) {
+    const commitTitle = `${ref}: ${title ?? "New task"}`;
+    const commitMessage = `Task doc: ${taskDocPath}`;
+    await tools.git.commitAll(commitTitle, commitMessage);
+    await tools.git.push(canonicalBranch);
+    messages.push(`Committed and pushed \`${canonicalBranch}\``);
+  }
 
   return {
     success: true,
-    messages: [
-      `Current branch \`${currentBranch}\` - ref: ${ref}`,
-      `New task \`${ref}\` initialised on \`${canonicalBranch}\``,
-      `Task doc: ${taskDocPath}`,
-      `Committed and pushed \`${canonicalBranch}\``,
-    ],
+    messages,
     ref,
     canonicalBranch,
     taskDocPath,
     specDocPaths: [],
     wipCarriedForward: false,
+    committed: commit,
   };
 }
 
@@ -117,5 +125,6 @@ function refuse(ref: string, message: string): InitCommandResult {
     taskDocPath: null,
     specDocPaths: [],
     wipCarriedForward: false,
+    committed: false,
   };
 }
