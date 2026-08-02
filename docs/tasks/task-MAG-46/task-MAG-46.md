@@ -155,6 +155,26 @@ restriction exists to stop an agent silently patching around a test it
 broke by accident, not to block a deliberate, documented revision to an
 earlier chunk's contract.
 
+**`lib/repo-state.ts` and `lib/task-doc.ts` now exist** — quick-route
+commit (`task/MAG-46`), a pure move with no behavior change (all 67
+existing task-phases tests pass unmodified). LLD §1.2/§4.5/§4.6 designate
+`lib/` as reused logic across commands, but it sat empty through two full
+spec/test/build cycles: MAG-46-05 (`init`) and MAG-46-06/06.01 (`status`)
+each implemented their own private version of exactly the logic the LLD
+already calls out as shared — `status.ts`'s `anyPhaseBranchExists`/
+`derivePhase`/`deriveState`/`assertNoGatePR` is `lib/repo-state.ts` §4.5's
+pipeline verbatim; `init.ts`'s template-scaffolding helpers are
+`lib/task-doc.ts` §4.6. Caught only once the `init` commit-and-push
+change above made the duplication concrete enough to notice, not by
+review of either prior chunk and not by any test. `status.ts` now calls
+`deriveRepoState()`; `init.ts` now calls `scaffoldTaskDoc()`. See the
+`task-phasing-lib-extraction-gap` note on the docs repo's `obsidian`
+branch for the fuller retrospective — this is the first full run through
+the design → spec → implement cycle for this tool, and the gap points at
+a real process weakness (spec docs don't currently carry LLD-level
+structural detail down to the agent) worth fixing before more chunks
+land, not just this one instance of it.
+
 ## Current Scope: spec 06.01
 
 **Working spec doc:**

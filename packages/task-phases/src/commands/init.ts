@@ -1,42 +1,21 @@
 import { UsageError } from "../errors.js";
 import type { ExternalTools, InitCommandResult } from "../types.js";
+import { scaffoldTaskDoc } from "../lib/task-doc.js";
 
 /** `pnpm task init <ref> [--quick] [--title <title>] [--json]` — see
  * task-phasing-lld.md §3.8. Implements spec 05: the happy path of both
  * branch-creation routes (normal -> `spec/{ref}`, `--quick` ->
  * `task/{ref}`), each scaffolding `docs/tasks/{ref}/task-{ref}.md` from the
- * template with `${ref}`/`${title}` substituted, plus the pre-flight blocks
- * that must pass before any branch is created: a dirty worktree with no
- * `--wip` (unconditional, §3.14), `main` behind `origin/main`, and a
- * missing `--title`/`--doc` (invalid argument, exit 2). The scaffolded doc
- * is then committed and pushed on the new branch — queuing it up is purely
- * mechanical by the time `init` runs, so there's no manual step left.
+ * template with `${ref}`/`${title}` substituted (`lib/task-doc.ts`, LLD
+ * §4.6), plus the pre-flight blocks that must pass before any branch is
+ * created: a dirty worktree with no `--wip` (unconditional, §3.14), `main`
+ * behind `origin/main`, and a missing `--title`/`--doc` (invalid argument,
+ * exit 2). The scaffolded doc is then committed and pushed on the new
+ * branch — queuing it up is purely mechanical by the time `init` runs, so
+ * there's no manual step left.
  *
  * The `--doc`/`--specs` conveniences, `--wip`-carried-forward, and the
  * existing-doc/reusable-branch decision tree land with MAG-46-18. */
-
-/** Joins path parts with `/`, tolerating trailing slashes on earlier parts
- * and empty parts — keeps the paths handed to `FileSystemTool` stable
- * regardless of host platform. */
-function joinPath(...parts: string[]): string {
-  return parts
-    .map((part) => part.replace(/\/+$/, ""))
-    .filter((part) => part.length > 0)
-    .join("/");
-}
-
-/** Expands a config path pattern, substituting `${ref}` with the task ref. */
-function expand(pattern: string, ref: string): string {
-  return pattern.replace(/\$\{ref\}/g, ref);
-}
-
-/** The task doc is a markdown file by construction — every LLD §3.8.1
- * example writes `task-{ref}.md`. The config's `taskDocName` pattern may
- * or may not carry the extension itself (`task-${ref}` vs
- * `task-${ref}.md`); guarantee the `.md` suffix either way. */
-function ensureMarkdown(name: string): string {
-  return name.endsWith(".md") ? name : `${name}.md`;
-}
 
 export async function init(
   tools: ExternalTools,
@@ -99,29 +78,7 @@ export async function init(
 
   await tools.git.createBranch(canonicalBranch, "main");
 
-  // Scaffold the task doc from the template. The layout comes from the
-  // `.task-phases.json` config (docs at `docs/tasks/`, task dir named after
-  // the ref, task doc `task-{ref}.md` inside it).
-  const config = await tools.fileSystem.loadConfig();
-
-  const docsDir = config.tasks.docs ?? "docs/tasks/";
-  const taskDirName = expand(config.tasks.dirName ?? "task-${ref}", ref);
-  const taskDocName = ensureMarkdown(expand(config.tasks.taskDocName ?? "task-${ref}", ref));
-
-  const taskDirPath = joinPath(docsDir, taskDirName);
-  const taskDocPath = joinPath(taskDirPath, taskDocName);
-
-  if (!(await tools.fileSystem.exists(taskDirPath))) {
-    await tools.fileSystem.mkdir(taskDirPath);
-  }
-
-  const templatePath = config.templates.task;
-  const template = await tools.fileSystem.readFile(templatePath);
-  const content = template
-    .replace(/\$\{ref\}/g, ref)
-    .replace(/\$\{title\}/g, title ?? "");
-
-  await tools.fileSystem.writeFile(taskDocPath, content);
+  const { taskDocPath } = await scaffoldTaskDoc(tools, ref, title);
 
   // By the time `init` runs, the design workflow that produced the doc(s)
   // just written is already finished — queuing them up is purely
