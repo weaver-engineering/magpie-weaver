@@ -8,7 +8,9 @@ import type { ExternalTools, InitCommandResult } from "../types.js";
  * template with `${ref}`/`${title}` substituted, plus the pre-flight blocks
  * that must pass before any branch is created: a dirty worktree with no
  * `--wip` (unconditional, §3.14), `main` behind `origin/main`, and a
- * missing `--title`/`--doc` (invalid argument, exit 2).
+ * missing `--title`/`--doc` (invalid argument, exit 2). The scaffolded doc
+ * is then committed and pushed on the new branch — queuing it up is purely
+ * mechanical by the time `init` runs, so there's no manual step left.
  *
  * The `--doc`/`--specs` conveniences, `--wip`-carried-forward, and the
  * existing-doc/reusable-branch decision tree land with MAG-46-18. */
@@ -121,12 +123,22 @@ export async function init(
 
   await tools.fileSystem.writeFile(taskDocPath, content);
 
+  // By the time `init` runs, the design workflow that produced the doc(s)
+  // just written is already finished — queuing them up is purely
+  // mechanical, so `init` commits and pushes them itself rather than
+  // leaving that as a manual step for every single task.
+  const commitTitle = `${ref}: ${title ?? "New task"}`;
+  const commitMessage = `Task doc: ${taskDocPath}`;
+  await tools.git.commitAll(commitTitle, commitMessage);
+  await tools.git.push(canonicalBranch);
+
   return {
     success: true,
     messages: [
       `Current branch \`${currentBranch}\` - ref: ${ref}`,
       `New task \`${ref}\` initialised on \`${canonicalBranch}\``,
       `Task doc: ${taskDocPath}`,
+      `Committed and pushed \`${canonicalBranch}\``,
     ],
     ref,
     canonicalBranch,
