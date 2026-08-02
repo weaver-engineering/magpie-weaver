@@ -215,28 +215,28 @@ checks first and leaves an existing doc untouched, reporting `written:
 false`; `init` skips `--commit` entirely when nothing was written, rather
 than attempting an empty commit.
 
-## Current Scope: spec 07
+## Current Scope: spec 08
 
-**Working spec doc:** `task-MAG-46-07-wip-commit-spec.md` (copied
-alongside this file). Implements `pnpm task wip [title] [message]` —
-commits everything on the current branch with the `{ref}: {title} - WIP`
-title convention, pushes it, and fails cleanly (no empty commit) when the
-worktree is already clean. Pure git write against `isDirty`/`commitAll`/
-`push`/`changedFiles` (the last one's a new `GitTool` addition this
-chunk's own notes flag — raise with the architect before inventing a
-shape unilaterally) — no `lib/repo-state.ts`/`lib/task-doc.ts` dependency
-(§2.1 of the LLD-note-additions review: `wip` is a pure git write, not a
-derivation consumer).
+**Working spec doc:** `task-MAG-46-08-dev-testing-gate-check-spec.md`
+(copied alongside this file). Implements the real `GateChecksTool`
+(`ExternalTools.gateChecks`) wrapping the already-in-repo
+`@magpieweaver/gate-check` package: `gateFor(phase)` (pure mapping,
+`spec→test-gate`/`test→build-gate`/`build→main-gate`/`quick→main-gate`)
+and `run(phase, args)` (invokes the real destination-gate check against
+actual repository state), exercised via `pnpm task --dev-testing
+gate-check <method> [-i | --args-file <path>]`. Ordinary integration
+work against a real, functioning dependency — no `lib/repo-state.ts`/
+`lib/task-doc.ts` dependency, and no new `GitTool`/interface gaps
+expected this time.
 
-**`spec/MAG-46` was created via a real `pnpm task init MAG-46` run** —
-the first chunk actually scaffolded by the tool rather than by hand,
-now that `spec/MAG-46` gets cleared down after each chunk (see the note
-above) instead of persisting stale across the whole backlog. `--specs`
-isn't implemented yet (MAG-46-18), so the spec doc itself was still
-copied in by hand; everything else — branch creation, confirming the
-task doc already existed and leaving it untouched — went through `init`
-for real, `--commit` deliberately omitted so the scaffold could be
-inspected before anything was pushed.
+**Second real `pnpm task init MAG-46 --commit` run** — `spec/MAG-46`
+(along with `test/build/ready/MAG-46`) was cleared down again once spec
+07's Main Gate PR merged, confirming the clear-down-per-cycle practice
+holds for a second cycle in a row. Same shape as spec 07's: `init`
+created the branch and correctly left the already-existing task doc
+untouched (`--commit` was a no-op as a result — nothing new was written,
+so nothing needed committing); the spec doc itself was still copied in
+by hand (`--specs` remains MAG-46-18's).
 
 **Phase ownership unchanged:** specification is architect-owned (this
 chunk's spec commit is already done); test and build are for the agent.
