@@ -8,14 +8,13 @@ import type {
 
 /**
  * `pnpm task status ...` — see task-phasing-lld.md §3.9. Implements the
- * §3.2 derivation pipeline's branch-exists case (spec 06): a phase
- * branch exists, so phase/state are derived from the branches themselves
- * (`not-started` vs `work-in-progress`). The merge-status / open-PR /
- * ready? branches of the pipeline (awaiting-pr / merged-pending-* /
- * ready? resolution) are not consulted here — they land with the chunks
- * that own them (MAG-46-06.01 / MAG-46-09/11/12/15). In particular, a
- * task with a gate PR open does not yet defer `status`; that deferral is
- * the subject of MAG-46-06.01.
+ * §3.2 derivation pipeline's branch-exists case (specs 06 + 06.01): a
+ * phase branch exists, so status first defers if any gate PR for `{ref}`
+ * is merged or open (spec 06.01) and otherwise derives phase/state from
+ * the branches themselves (`not-started` vs `work-in-progress`, spec 06).
+ * The ready? branches of the pipeline (ready? resolution) are not
+ * consulted here — they land with the chunks that own them
+ * (MAG-46-09/11/12/15).
  */
 
 /** The four phase-branch prefixes that make a ref "initialised". */
@@ -57,6 +56,37 @@ async function anyPhaseBranchExists(
     }
   }
   return false;
+}
+
+/** The base/head pairs whose merge/open state drives the §3.2 pipeline
+ * ahead of branch-exists derivation: the two Main Gate PRs
+ * (`build/{ref}` / `task/{ref}` -> `main`) and the Build Gate PR
+ * (`test/{ref}` -> `build/{ref}`). Merged pair first, then open, in LLD
+ * §3.2's order. */
+const GATE_PR_PAIRS: ReadonlyArray<readonly [base: string, head: string]> = [
+  ["main", "build/{ref}"],
+  ["main", "task/{ref}"],
+  ["build/{ref}", "test/{ref}"],
+] as const;
+
+/** Defers `status` ("not implemented") if any gate PR exists for `ref` —
+ * a merged or open PR on any of the three gate pairs (§3.1-§3.4). This
+ * runs *before* the branch-exists derivation, so a PR-present task never
+ * silently misreports as `not-started`/`work-in-progress`. The PR-driven
+ * states (`awaiting-pr`, `merged-pending-pull`, `merged-pending-cleanup`)
+ * are owned by later chunks (MAG-46-11/12/15); until they land, an
+ * existing PR means the command cannot answer authoritatively. */
+async function assertNoGatePR(tools: ExternalTools, ref: string): Promise<void> {
+  for (const [base, head] of GATE_PR_PAIRS) {
+    const baseName = base.replace("{ref}", ref);
+    const headName = head.replace("{ref}", ref);
+    if ((await tools.github.findMergedPR(baseName, headName)) !== null) {
+      throw new Error("not implemented");
+    }
+    if ((await tools.github.findOpenPR(baseName, headName)) !== null) {
+      throw new Error("not implemented");
+    }
+  }
 }
 
 /** Derives the phase whose branch is currently authoritative for `ref`,
@@ -130,10 +160,11 @@ export async function status(
   }
 
   if (await anyPhaseBranchExists(tools, ref)) {
-    // A phase branch exists — derive phase and state from the branches
-    // themselves (spec 06). The merge-status / open-PR / ready? branches
-    // of the §3.2 pipeline are out of scope for this chunk (MAG-46-06.01
-    // / MAG-46-09/11/12/15).
+    // A phase branch exists. First defer if any gate PR for the ref is
+    // merged or open (spec 06.01, §3.1-§3.4); only with no gate PR does
+    // the branch-exists derivation (spec 06) derive phase/state.
+    await assertNoGatePR(tools, ref);
+
     const { phase, canonicalBranch } = await derivePhase(tools, ref);
     const state = await deriveState(tools, canonicalBranch);
 
