@@ -253,6 +253,49 @@ describe("main-gate", () => {
       expect(result.passed).toBe(false);
       expect(result.violations).toContain("Build failed");
     });
+
+    it("returns passed=false when an existing test fails, even with a valid task commit and successful build", async () => {
+      // main-gate never actually ran the test suite for the quick route —
+      // only validateTaskCommit (structure) and, as of today, the build
+      // check. quick-scaffolder.md promises "All tests pass" as a gate
+      // requirement; this proves it's now genuinely enforced.
+      (inspectors.git.currentBranch as ReturnType<typeof vi.fn>).mockResolvedValue("task/MAG-30");
+
+      const mockMergeBase = inspectors.git.mergeBase as ReturnType<typeof vi.fn>;
+      mockMergeBase.mockResolvedValue("merge-base-sha");
+
+      const mockRevList = inspectors.git.revList as ReturnType<typeof vi.fn>;
+      mockRevList.mockResolvedValueOnce(["task-commit-sha"]);
+      mockRevList.mockResolvedValueOnce([]);
+
+      const mockCommitMessages = inspectors.git.commitMessages as ReturnType<typeof vi.fn>;
+      mockCommitMessages.mockResolvedValue(["MAG-30 Task commit\n\nTask body"]);
+
+      const mockAdded = inspectors.git.added as ReturnType<typeof vi.fn>;
+      mockAdded.mockResolvedValue([]);
+
+      const mockModified = inspectors.git.modified as ReturnType<typeof vi.fn>;
+      mockModified.mockResolvedValue([]);
+
+      const mockDeleted = inspectors.git.deleted as ReturnType<typeof vi.fn>;
+      mockDeleted.mockResolvedValue([]);
+
+      (inspectors.coverage.runTestsWithCoverage as ReturnType<typeof vi.fn>).mockImplementation(() => {
+        throw new Error("Tests failed");
+      });
+      (inspectors.coverage.getCoverage as ReturnType<typeof vi.fn>).mockResolvedValue(85);
+      (inspectors.coverage.getNewLineCoverage as ReturnType<typeof vi.fn>).mockResolvedValue(95);
+      (inspectors.coverage.getTestResults as ReturnType<typeof vi.fn>).mockResolvedValue({
+        numTotalTests: 10,
+        numFailedTests: 1,
+        failingTestFiles: ["test/existing.test.ts"],
+      });
+
+      const result = await fn(inspectors, { "destination-branch": "main" });
+
+      expect(result.passed).toBe(false);
+      expect(result.violations).toContain("Tests failed");
+    });
   });
 
   describe("Branch ref fails", () => {

@@ -128,7 +128,39 @@ export class CoverageInspectorImpl implements CoverageInspector {
       return entry.lines.pct;
     }
 
-    return summary.total.lines.pct;
+    return this.computeAggregateLineCoverage(summary);
+  }
+
+  /** Recomputes the overall line-coverage percentage across every file in
+   * `summary` except `total`, excluding `deps/*.ts` files (see
+   * `isExcludedFromCoverage`). Doesn't just filter `summary.total` because
+   * that figure is pre-aggregated across every file, deps/*.ts included. */
+  private computeAggregateLineCoverage(
+    summary: Record<string, { lines: { total: number; covered: number; pct: number } }>,
+  ): number {
+    let total = 0;
+    let covered = 0;
+    for (const [filePath, entry] of Object.entries(summary)) {
+      if (filePath === "total" || this.isExcludedFromCoverage(filePath)) continue;
+      total += entry.lines.total;
+      covered += entry.lines.covered;
+    }
+    if (total === 0) return 100;
+    return Math.round((covered / total) * 100 * 100) / 100;
+  }
+
+  /** `deps/*.ts` files are deliberately thin boundary wrappers: every
+   * system-level command test mocks this exact boundary rather than
+   * exercising it in-process, and their real behavior is instead proven
+   * by `--dev-testing` tests that spawn the built CLI as a subprocess —
+   * invisible to vitest's own coverage instrumentation, which only tracks
+   * code running in its own process. Some of this code may also be
+   * genuinely untestable in-process at all (thin pass-throughs to a real
+   * external tool). Excluded from both the overall and new-line coverage
+   * figures rather than penalizing every change that touches them for a
+   * measurement gap, not a real testing gap. */
+  private isExcludedFromCoverage(filePath: string): boolean {
+    return /\/deps\/[^/]+\.ts$/.test(filePath);
   }
 
   /**
@@ -159,6 +191,7 @@ export class CoverageInspectorImpl implements CoverageInspector {
     let coveredNewLines = 0;
 
     for (const [filePath, lineNumbers] of Object.entries(newLines)) {
+      if (this.isExcludedFromCoverage(filePath)) continue;
       const coverage = fileLineCoverage[filePath];
       if (!coverage) continue;
 
