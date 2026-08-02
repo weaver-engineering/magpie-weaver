@@ -114,16 +114,37 @@ followed each cycle. A separate `git merge --ff-only*` permission gap
 `task/MAG-40` ([PR #50](https://github.com/weaver-engineering/magpie-weaver/pull/50),
 left open in case more surface before closing it out).
 
-## Current Scope: spec 06
+**Spec 06 (`task status` derives `not-started`/`work-in-progress`) test
+phase is done** — merged via
+[PR #52](https://github.com/weaver-engineering/magpie-weaver/pull/52).
+Build phase (PR #53) review surfaced a real gap: `build-implementer` had
+written a check (`assertNoGatePR`) to defer `status` when a gate PR
+exists for `{ref}` — recognising, correctly, that MAG-46-06's own tests
+never required it, since their Given clauses only ever set
+`findMergedPR`/`findOpenPR` to return `null` as a precondition, never as
+a scenario of their own — but never wired the function into `status()`.
+Dead code, confirmed via coverage (`assertNoGatePR` at 0 invocations
+despite `main-gate` reporting 100% new-line coverage — a gate-checks
+coverage-computation gap worth a separate look later). Left unwired, this
+is a real regression: before MAG-46-06, any existing phase branch
+deferred unconditionally; now the no-PR case gets a real answer, but so
+does the PR-exists case, silently overstepping into MAG-46-09/11/12/15's
+territory. Not patched quietly in the build PR — the fix belongs to a
+proper test-driven chunk (MAG-46-06.01) instead of retroactively
+strengthening an already-merged test commit.
+
+## Current Scope: spec 06.01
 
 **Working spec doc:**
-`task-MAG-46-06-status-not-started-and-work-progress-spec.md` (copied
-alongside this file). Extends `pnpm task status [--ref <ref>]` to derive
-`not-started`/`work-in-progress` for both `spec/{ref}` and `task/{ref}`,
-plus the ancestry-staleness fallback, `branchMismatch`, and WIP-marked-
-head-commit behaviors — against injected `git`/`github` test doubles,
-same command-level pattern as MAG-46-04/05. Full `spec` -> `test` ->
-`build` path.
+`task-MAG-46-06-01-status-defers-when-gate-pr-exists-spec.md` (copied
+alongside this file). Adds the explicit required behavior MAG-46-06
+never had: a merged or open PR on any of the three gate pairs
+(`build/{ref}`→`main`, `task/{ref}`→`main`, `test/{ref}`→`build/{ref}`)
+causes `status` to defer, checked *before* the no-PR branch-exists
+derivation MAG-46-06 already implements. Full `spec` -> `test` -> `build`
+path — PR #53 is being sent back asking `build-implementer` to strip the
+dead `assertNoGatePR` code for now; it gets reintroduced here, properly
+driven by this chunk's own failing tests.
 
 Note: `pnpm task init MAG-46` cannot be used to move this long-running
 ref onto a new chunk — confirmed directly (`task init` refuses with
