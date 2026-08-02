@@ -75,17 +75,19 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
   messages.push(`Destination branch "${destinationBranch}" has not advanced`);
 
   const buildBranchPattern = `build/${ref}`;
-  const mainBranchPattern = `main/${ref}`;
+  const readyBranchPattern = `ready/${ref}`;
   const taskBranchPattern = `task/${ref}`;
 
-  // The full route's Main Gate PR is raised from main/{ref} (created off
+  // The full route's Main Gate PR is raised from ready/{ref} (created off
   // build/{ref} once the build commit is ready), not from build/{ref}
   // itself — build/{ref} only ever receives the Build Gate PR merge, so
   // it can be branch-protected without an exception for a direct push.
-  // But this same check runs locally too, as the agent's own
+  // (Not main/{ref}: git can't create that ref at all once `main` itself
+  // exists as a branch — refs/heads/main and refs/heads/main/{ref} can't
+  // coexist.) This same check runs locally too, as the agent's own
   // self-verification step, possibly before it has renamed/pushed
-  // main/{ref} yet — so both names are accepted here as equivalent.
-  if (currentBranch === buildBranchPattern || currentBranch === mainBranchPattern) {
+  // ready/{ref} yet — so both names are accepted here as equivalent.
+  if (currentBranch === buildBranchPattern || currentBranch === readyBranchPattern) {
     if (commits.length !== 3) {
       violations.push(
         `Expected exactly 3 commits between HEAD and ${destinationBranch}, found ${commits.length}`,
@@ -248,7 +250,7 @@ export const fn: GateCheckFn = async (inspectors, args): Promise<GateCheckResult
     };
   }
 
-  violations.push(`Branch "${currentBranch}" does not match build/{ref}, main/{ref}, or task/{ref}`);
+  violations.push(`Branch "${currentBranch}" does not match build/{ref}, ready/{ref}, or task/{ref}`);
   return {
     check: "main-gate",
     args,

@@ -141,12 +141,14 @@ describe("main-gate", () => {
       expect(result.values.output).toBe("src/foo.ts(3,5): error TS2322");
     });
 
-    it("also accepts main/{ref} as the full-route branch (the Main Gate PR's actual head)", async () => {
-      // The Main Gate PR is raised from main/{ref} (created off build/{ref}
+    it("also accepts ready/{ref} as the full-route branch (the Main Gate PR's actual head)", async () => {
+      // The Main Gate PR is raised from ready/{ref} (created off build/{ref}
       // once the build commit is ready), not from build/{ref} itself —
       // build/{ref} only ever receives the Build Gate PR merge now. Same
-      // 3-commit shape, just a different current-branch name.
-      (inspectors.git.currentBranch as ReturnType<typeof vi.fn>).mockResolvedValue("main/MAG-30");
+      // 3-commit shape, just a different current-branch name. (Not
+      // main/{ref}: git can't create that ref while `main` itself exists
+      // as a branch.)
+      (inspectors.git.currentBranch as ReturnType<typeof vi.fn>).mockResolvedValue("ready/MAG-30");
       setupBuildSuccess(inspectors);
       setupCoverageMocks(inspectors);
 
@@ -345,7 +347,7 @@ describe("main-gate", () => {
   });
 
   describe("Unrecognized branch", () => {
-    it("returns passed=false when branch does not match build/{ref}, main/{ref}, or task/{ref}", async () => {
+    it("returns passed=false when branch does not match build/{ref}, ready/{ref}, or task/{ref}", async () => {
       (inspectors.git.currentBranch as ReturnType<typeof vi.fn>).mockResolvedValue("feature/MAG-30");
 
       const mockMergeBase = inspectors.git.mergeBase as ReturnType<typeof vi.fn>;
@@ -358,7 +360,7 @@ describe("main-gate", () => {
       const result = await fn(inspectors, { "destination-branch": "main" });
 
       expect(result.passed).toBe(false);
-      expect(result.violations[0]).toContain("does not match build/{ref}, main/{ref}, or task/{ref}");
+      expect(result.violations[0]).toContain("does not match build/{ref}, ready/{ref}, or task/{ref}");
     });
   });
 
