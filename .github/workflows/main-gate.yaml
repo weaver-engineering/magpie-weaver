@@ -1,9 +1,10 @@
 name: Main Gate
 
-# Main Gate: PR from main/{ref} (full route, 3 commits — created off
+# Main Gate: PR from ready/{ref} (full route, 3 commits — created off
 # build/{ref} once the build commit is ready, since build/{ref} only ever
 # receives the Build Gate PR merge and is branch-protected against direct
-# pushes) or task/{ref} (quick route, 1 commit) -> main.
+# pushes; not main/{ref} — git can't create that ref while `main` itself
+# exists as a branch) or task/{ref} (quick route, 1 commit) -> main.
 # Thin wrapper around `pnpm gate-check main-gate` — the single source of
 # truth for the actual validation logic (spec/test/build or task commit
 # structure, coverage thresholds, and a real `tsc` build). See
@@ -27,7 +28,7 @@ permissions:
 
 jobs:
   validate-main-gate:
-    if: startsWith(github.head_ref, 'main/') || startsWith(github.head_ref, 'task/')
+    if: startsWith(github.head_ref, 'ready/') || startsWith(github.head_ref, 'task/')
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
