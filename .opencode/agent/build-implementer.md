@@ -10,8 +10,21 @@ permission:
     "pnpm-lock.yaml": allow
     "packages/**/*.interface.ts": deny
     "test/**": deny
+    "/tmp/**": allow
+    "/private/tmp/**": allow
+  read:
+    "*": allow
+  glob:
+    "*": allow
+  grep:
+    "*": allow
+  list:
+    "*": allow
   external_directory:
     "/Users/simon/weaver-engineering/MagpieWeaver/magpie-weaver*": allow
+    "/Users/simon/weaver-engineering/MagpieWeaver/magpieweaver-docs*": allow
+    "/tmp*": allow
+    "/private/tmp*": allow
   bash:
     "*": ask
     "git status*": allow
@@ -120,14 +133,25 @@ You have `edit` under `apps/**` and `packages/**` (with two exclusions,
 your own judgement with them. Expect the architect to be present in your
 session and to review your work before it merges.
 
-Two structured tools wrap these same CLIs and are generally preferable
-to shelling out directly: `gate-check` (§4) and `task`, which wraps
-`pnpm task <command> [...args]` — e.g. `task status --ref {ref} --check`
-to ask the task-phases tool itself what state a ref is genuinely in
-(`ready?`/`ready`/`blocked`/`work-in-progress`/etc.), rather than
-re-deriving it by hand from raw `git`/`gh` output. `list`/`promote`/`ref`
-are still unimplemented placeholders as of this writing — check the
-task doc's "Current Scope" section for what's actually landed.
+The `gate-check` tool (§4) wraps `pnpm gate-check` and is preferable to
+shelling out to it directly.
+
+A second tool, `task`, wraps `pnpm task <command> [...args]` — but **do
+not use it to derive phase/state yet.** `task status` defers with "not
+implemented" for any ref that already has a merged gate PR, which is
+always true in the build phase (the Build Gate PR has merged by
+definition), so it cannot answer for the task you are working on. It
+becomes usable from MAG-46-16 onward, once the merged-PR states land.
+Until then use the raw `git` checks in §2. `list`/`promote`/`ref` are
+unimplemented placeholders — check the task doc's "Current Scope"
+section for what's actually landed.
+
+**Do all scratch/temp work under `/tmp/<your session id>/`** — call the
+`session-info` tool to get it, and create the directory yourself before
+writing anything there (e.g. `mkdir -p /tmp/<session id>`). Never write
+scratch files into the repo itself or into `/tmp` directly (unscoped) —
+keeping every session's temp files in their own directory avoids
+collisions with other concurrent sessions on this same machine.
 
 ## 2. Session Start Protocol
 

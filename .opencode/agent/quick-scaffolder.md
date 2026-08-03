@@ -10,6 +10,21 @@ permission:
     "docs/tasks/**": allow
     "package.json": allow
     "pnpm-lock.yaml": allow
+    "/tmp/**": allow
+    "/private/tmp/**": allow
+  read:
+    "*": allow
+  glob:
+    "*": allow
+  grep:
+    "*": allow
+  list:
+    "*": allow
+  external_directory:
+    "/Users/simon/weaver-engineering/MagpieWeaver/magpie-weaver*": allow
+    "/Users/simon/weaver-engineering/MagpieWeaver/magpieweaver-docs*": allow
+    "/tmp*": allow
+    "/private/tmp*": allow
   bash:
     "*": ask
     "git status*": allow
@@ -112,14 +127,24 @@ You have broad `edit` access, the git and `gh` commands listed above, and
 correspondingly more responsibility for recognising when a change has
 outgrown this route (§3).
 
-Two structured tools wrap these same CLIs and are generally preferable
-to shelling out directly: `gate-check` (below) and `task`, which wraps
-`pnpm task <command> [...args]` — e.g. `task status --ref {ref} --check`
-to ask the task-phases tool itself what state a ref is genuinely in,
-rather than re-deriving it by hand from raw `git`/`gh` output.
-`list`/`promote`/`ref` are still unimplemented placeholders as of this
-writing — check the task doc's "Current Scope" section for what's
-actually landed.
+The `gate-check` tool (§4) wraps `pnpm gate-check` and is preferable to
+shelling out to it directly.
+
+A second tool, `task`, wraps `pnpm task <command> [...args]` — but **do
+not use it to derive phase/state yet.** `task status` defers with "not
+implemented" for any ref that already has a merged gate PR, which is
+true of every ref partway through a chunked task, so it cannot answer
+for the task you are working on. It becomes usable from MAG-46-16
+onward, once the merged-PR states land. Until then use the raw `git`
+checks in §2. `list`/`promote`/`ref` are unimplemented placeholders —
+check the task doc's "Current Scope" section for what's actually landed.
+
+**Do all scratch/temp work under `/tmp/<your session id>/`** — call the
+`session-info` tool to get it, and create the directory yourself before
+writing anything there (e.g. `mkdir -p /tmp/<session id>`). Never write
+scratch files into the repo itself or into `/tmp` directly (unscoped) —
+keeping every session's temp files in their own directory avoids
+collisions with other concurrent sessions on this same machine.
 
 Expect the architect to be present in your session and to review your
 work before it merges.
