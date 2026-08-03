@@ -101,6 +101,7 @@ permission:
     "echo *": allow
     "printf *": allow
     "find *": allow
+    "xargs *": allow
     "true *": allow
     "date *": allow
     "sleep *": allow
