@@ -215,28 +215,41 @@ checks first and leaves an existing doc untouched, reporting `written:
 false`; `init` skips `--commit` entirely when nothing was written, rather
 than attempting an empty commit.
 
-## Current Scope: spec 08
+## Current Scope: spec 09
 
-**Working spec doc:** `task-MAG-46-08-dev-testing-gate-check-spec.md`
-(copied alongside this file). Implements the real `GateChecksTool`
-(`ExternalTools.gateChecks`) wrapping the already-in-repo
-`@magpieweaver/gate-check` package: `gateFor(phase)` (pure mapping,
-`spec→test-gate`/`test→build-gate`/`build→main-gate`/`quick→main-gate`)
-and `run(phase, args)` (invokes the real destination-gate check against
-actual repository state), exercised via `pnpm task --dev-testing
-gate-check <method> [-i | --args-file <path>]`. Ordinary integration
-work against a real, functioning dependency — no `lib/repo-state.ts`/
-`lib/task-doc.ts` dependency, and no new `GitTool`/interface gaps
-expected this time.
+**Working spec doc:**
+`task-MAG-46-09-status-check-ready-or-blocked-spec.md` (copied alongside
+this file). Makes `ready?` reachable and resolvable via `pnpm task status
+[--ref <ref>] [--check] [--json]`: `lib/repo-state.ts`'s `deriveState()`
+gains the WIP-marker check (distinguishing `ready?` from
+`work-in-progress` — it already calls `headCommitTitle()` but discards
+the result), a new `resolveReady(tools, status)` is added to
+`lib/repo-state.ts` as a pure pass-through for any non-`ready?` status
+(called by `status.ts` only when `--check` is given, and designed for
+`promote`, MAG-46-10/11, to reuse unconditionally), and `status.ts` gets
+the `--ref`+`--check` refusal rule (LLD §3.9).
 
-**Second real `pnpm task init MAG-46 --commit` run** — `spec/MAG-46`
+**Pre-handoff spec review caught a real inconsistency before this went
+to test-writer:** the spec's own original Deliverable Note directed
+baking gate-check resolution into the *shared* `deriveState()`/
+`deriveRepoState()` pipeline (used by every command, including the
+not-yet-built `list`) — which directly contradicts the LLD's explicit
+rule that only `promote` (always) and `status --check` (opt-in) resolve
+`ready?`, and self-contradicted the spec's own required behavior that
+`gateChecks.run` must **not** be called on a plain `status` read.
+Corrected in place (see the spec doc's own §2.1) to the
+`resolveReady()`-in-`lib/`-but-called-by-`status.ts` shape above, per
+architect+user discussion. Also added two required behaviors the spec
+was missing entirely: a WIP-marked head never resolving to `ready?`, and
+`resolveReady()`'s own pass-through guarantee under direct unit test.
+
+**Third real `pnpm task init MAG-46 --commit` run** — `spec/MAG-46`
 (along with `test/build/ready/MAG-46`) was cleared down again once spec
-07's Main Gate PR merged, confirming the clear-down-per-cycle practice
-holds for a second cycle in a row. Same shape as spec 07's: `init`
-created the branch and correctly left the already-existing task doc
-untouched (`--commit` was a no-op as a result — nothing new was written,
-so nothing needed committing); the spec doc itself was still copied in
-by hand (`--specs` remains MAG-46-18's).
+08's full cycle (spec→test→build) merged to `main`, confirming the
+clear-down-per-cycle practice holds for a third cycle in a row. Same
+shape as specs 07/08's: `init` correctly left the already-existing task
+doc untouched (`--commit` was a no-op as a result); the spec doc itself
+was still copied in by hand (`--specs` remains MAG-46-18's).
 
 **Phase ownership unchanged:** specification is architect-owned (this
 chunk's spec commit is already done); test and build are for the agent.

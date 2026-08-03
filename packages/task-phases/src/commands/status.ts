@@ -1,17 +1,18 @@
 import type { ExternalTools, Phase, StatusCommandResult, TaskState, TaskStatus } from "../types.js";
-import { deriveRepoState } from "../lib/repo-state.js";
+import { deriveRepoState, resolveReady } from "../lib/repo-state.js";
 
 /**
  * `pnpm task status ...` — see task-phasing-lld.md §3.9. Implements the
- * §3.2 derivation pipeline's branch-exists case (specs 06 + 06.01): a
- * phase branch exists, so status first defers if any gate PR for `{ref}`
- * is merged or open (spec 06.01) and otherwise derives phase/state from
- * the branches themselves (`not-started` vs `work-in-progress`, spec 06).
- * The ready? branches of the pipeline (ready? resolution) are not
- * consulted here — they land with the chunks that own them
- * (MAG-46-09/11/12/15). The derivation itself lives in `lib/repo-state.ts`
- * (LLD §4.5) — shared with every other command that needs the same
- * {ref, phase, state} pipeline, not reimplemented here.
+ * §3.2 derivation pipeline's branch-exists case (specs 06 + 06.01 + 09):
+ * a phase branch exists, so status first defers if any gate PR for `{ref}`
+ * is merged or open (spec 06.01) and otherwise derives phase/state from the
+ * branches themselves (`not-started` vs `ready?` vs `work-in-progress`,
+ * specs 06/09). `--check` (MAG-46-09 §2.1) opts into resolving `ready?` to
+ * `ready`/`blocked` via `resolveReady()`, and refuses — exit 1 — when
+ * `--ref <other>` asks to check a task other than the one checked out. The
+ * derivation itself lives in `lib/repo-state.ts` (LLD §4.5) — shared with
+ * every other command that needs the same {ref, phase, state} pipeline, not
+ * reimplemented here.
  */
 
 /** The four phase-branch prefixes a ref can be checked out on — used only
@@ -58,7 +59,43 @@ export async function status(
     return notInitialisedResult(ref, currentBranch);
   }
 
-  const taskStatus = await deriveRepoState(tools, ref, currentBranch);
+  let taskStatus = await deriveRepoState(tools, ref, currentBranch);
+
+  const checkRequested = args.check === true;
+
+  // --check is only valid when `--ref` names the currently checked-out task.
+  // A mismatch is a hard refusal (success: false / exit 1), not a crash —
+  // the taskStatus for `<ref>` is still fully derived underneath.
+  const checkedOutRef = deriveRefFromBranch(currentBranch);
+  if (checkRequested && checkedOutRef !== ref) {
+    return {
+      success: false,
+      messages: [
+        `Current branch \`${currentBranch}\` - ref: ${ref}`,
+        stateLine(ref, taskStatus.phase, taskStatus.state),
+        `--check requires ${ref} to be the currently checked-out task (checked-out ref: ${checkedOutRef ?? "none"})`,
+      ],
+      taskStatus,
+      checked: false,
+      checkRefused: true,
+      fixed: false,
+    };
+  }
+
+  // --check is an opt-in: resolving ready? (via resolveReady) runs the gate
+  // only when --check was requested. A plain read or a non-ready? state
+  // leaves ready?/work-in-progress unresolved and never calls gate checks.
+  if (checkRequested) {
+    taskStatus = await resolveReady(tools, taskStatus);
+  }
+
+  // A successfully-resolved `blocked` read is still a successful status
+  // invocation (exit 0, §3.9) — it only carries the gate's own violation
+  // message verbatim, not a reworded one (§3.3).
+  const violation =
+    taskStatus.state === "blocked" && taskStatus.gate?.result
+      ? taskStatus.gate.result.violations[0]
+      : undefined;
 
   return {
     success: true,
@@ -66,8 +103,9 @@ export async function status(
       `Current branch \`${currentBranch}\` - ref: ${ref}`,
       stateLine(ref, taskStatus.phase, taskStatus.state),
     ],
+    violation,
     taskStatus,
-    checked: false,
+    checked: checkRequested && taskStatus.gate !== undefined,
     checkRefused: false,
     fixed: false,
   };
