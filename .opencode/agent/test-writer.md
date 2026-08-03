@@ -107,6 +107,15 @@ and `pnpm gate-check`. Use your own judgement with them. Expect the
 architect to be present in your session and to review your work before
 it merges.
 
+Two structured tools wrap these same CLIs and are generally preferable
+to shelling out directly: `gate-check` (below) and `task`, which wraps
+`pnpm task <command> [...args]` — e.g. `task status --ref {ref} --check`
+to ask the task-phases tool itself what state a ref is genuinely in,
+rather than re-deriving it by hand from raw `git`/`gh` output.
+`list`/`promote`/`ref` are still unimplemented placeholders as of this
+writing — check the task doc's "Current Scope" section for what's
+actually landed.
+
 ## 2. Session Start Protocol
 
 Run these in order, every session, before any edit. Stop at the first
@@ -189,11 +198,7 @@ raise the PR. If a specified behaviour is ambiguous or you cannot see how
 to test it, report `needs-architect-intervention` (§6) rather than
 skipping it silently.
 
-Verify with:
-
-```bash
-pnpm gate-check build-gate --json --ref {ref}
-```
+Verify with the `gate-check` tool (`checkName: "build-gate"`, `args: ["--ref", "{ref}"]`) — it wraps this exact CLI call and relays the structured result, including on a failing/blocked check. Prefer it over shelling out to `pnpm gate-check` directly: it also covers every other check in the catalog (`branch-ref`, `pr-title`, `coverage`, `existing-tests-pass`, and more), not just the three top-level gates — call it with `checkName` omitted (or `"list"`) to see the full catalog with each check's description and required arguments before reaching for a narrower one to debug a specific violation.
 
 A failing result is ordinary working information — read the violations,
 fix, re-run. Squash to one commit, debug your failing assertions, add the
