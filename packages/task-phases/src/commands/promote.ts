@@ -52,7 +52,7 @@ function stateLine(ref: string, phase: Phase | null, state: TaskState): string {
 
 export async function promote(
   tools: ExternalTools,
-  _args: Record<string, boolean | number | string | string[]>,
+  args: Record<string, boolean | number | string | string[]>,
 ): Promise<PromoteCommandResult> {
   // Fetch is called unconditionally before any derivation, matching `status`
   // (§1.1) — phase/state derivation must read fresh remote-tracking refs.
@@ -79,6 +79,99 @@ export async function promote(
         `Refusing to promote: current branch \`${currentBranch}\` does not match the task's canonical phase/state branch \`${taskStatus.canonicalBranch}\``,
       ],
       action: "none",
+    };
+  }
+
+  // §3.5's plain rebase-forward: the derivation surfaced a rebase trigger —
+  // either the staleness fallback (test/{ref} exists but spec/{ref} is not
+  // its ancestor, so test/{ref} must be rebased onto the amended spec/{ref})
+  // or trunk drift (origin/main is not an ancestor of the derived spec/task
+  // branch, so it must be rebased onto origin/main). This runs *before* the
+  // fork path because in the stale-test case phase is spec and state is
+  // ready, which the fork action would otherwise claim. `--confirm-rebase`
+  // (or an interactive y/N prompt, in non-`--json` mode) is required: a
+  // force-push rewrite is never performed silently.
+  if (taskStatus.rebase !== undefined) {
+    const { branch, onto } = taskStatus.rebase;
+    const confirmed = args["confirm-rebase"] === true;
+
+    if (!confirmed) {
+      // Refusal contract (LLD §3.5): no git action at all, report that a
+      // rebase is required and what flag to supply, exit 1.
+      return {
+        success: false,
+        action: "none",
+        messages: [
+          `Current branch \`${currentBranch}\` - ref: ${ref}`,
+          `Promoting ${ref}::${taskStatus.phase}::${taskStatus.state} requires a rebase: \`${branch}\` is behind and must be rebased onto \`${onto}\``,
+          `This is a force-pushed branch rewrite - confirm with --confirm-rebase to proceed`,
+          `No action taken`,
+        ],
+      };
+    }
+
+    const outcome = await tools.git.rebase(branch, onto);
+
+    if (outcome.status === "ok") {
+      await tools.git.push(branch, { force: true });
+      // §2.1's branch-restoration invariant: rebase()'s `git rebase --onto
+      // <onto> <upstream> <branch>` form checks `<branch>` out as part of
+      // the operation, so when the rebased branch differs from the caller's
+      // starting branch (the §3.1 staleness case — rebasing test/{ref} from
+      // spec/{ref}), the worktree is parked on it and must be returned.
+      if (branch !== currentBranch) {
+        await tools.git.checkout(currentBranch);
+      }
+      return {
+        success: true,
+        action: "rebased",
+        rebaseOutcome: outcome,
+        messages: [
+          `Current branch \`${currentBranch}\` - ref: ${ref}`,
+          `Rebased \`${branch}\` onto \`${onto}\` and force-pushed`,
+          ...(branch !== currentBranch
+            ? [`Restored starting branch \`${currentBranch}\``]
+            : []),
+        ],
+      };
+    }
+
+    if (outcome.status === "conflict") {
+      // The conflict was discovered mid-replay, AFTER rebase() checked the
+      // branch out — the caller's starting branch is restored regardless of
+      // outcome (§2.1). No push of a conflicted rewrite.
+      if (branch !== currentBranch) {
+        await tools.git.checkout(currentBranch);
+      }
+      return {
+        success: false,
+        action: "rebased",
+        rebaseOutcome: outcome,
+        messages: [
+          `Current branch \`${currentBranch}\` - ref: ${ref}`,
+          `Rebase of \`${branch}\` onto \`${onto}\` hit a conflict`,
+          `${outcome.details}`,
+          ...(branch !== currentBranch
+            ? [`Restored starting branch \`${currentBranch}\``]
+            : []),
+        ],
+      };
+    }
+
+    // unexpected-commit-count: rebase()'s precondition is a plain
+    // `rev-list --count`, checked BEFORE any checkout is attempted, so the
+    // worktree never moved and there is nothing to restore (§2.1). The
+    // branch carries more than one commit of its own — the agent must squash
+    // before promoting.
+    return {
+      success: false,
+      action: "rebased",
+      rebaseOutcome: outcome,
+      messages: [
+        `Current branch \`${currentBranch}\` - ref: ${ref}`,
+        `Cannot rebase \`${branch}\` onto \`${onto}\`: it has ${outcome.actual} commits of its own, expected ${outcome.expected}`,
+        `Please squash \`${branch}\` to a single commit before promoting`,
+      ],
     };
   }
 

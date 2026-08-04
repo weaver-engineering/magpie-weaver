@@ -58,6 +58,13 @@ export interface TaskStatus {
    * true */
   branchMismatch: boolean;
   state: TaskState;
+  /** §3.5 rebase-forward trigger surfaced by the derivation — set when the
+   * staleness fallback (test/{ref} exists but spec/{ref} is not its
+   * ancestor) or trunk drift (origin/main is not an ancestor of the derived
+   * spec/task branch) means the phase's canonical branch must be rebased
+   * forward rather than forked. `promote` acts on this (`action:
+   * "rebased"`, `--confirm-rebase`-gated); `status` merely reports it. */
+  rebase?: { branch: string; onto: string };
   gate?: {
     name: string;
     /** `false` only for `spec/{ref}` -> `test/{ref}` */
