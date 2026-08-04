@@ -318,6 +318,73 @@ Adds a fourth instance to the growing "pre-handoff review gap" list
 file against every already-merged chunk's own file-layout row, not just
 its behavioral assertions.
 
+**Test phase done** — merged via
+[PR #101](https://github.com/weaver-engineering/magpie-weaver/pull/101)
+(`test/MAG-46` → `build/MAG-46`), including a one-line review fix (a
+dead ternary in `quick-route-pr-raised.test.ts`'s `branchExists` mock —
+both branches returned `true`) relayed to the live session and amended
+in before merge.
+
+**Build phase implemented, [PR #103](https://github.com/weaver-engineering/magpie-weaver/pull/103) raised, not yet merged.**
+`build-implementer` self-resolved a real, previously-undocumented gap
+along the way: `main-gate`'s "destination branch has advanced past the
+merge base" check fired for the first time in this backlog (`origin/main`
+had moved via PR #100's task-doc commit after `build/MAG-46` forked from
+it) — nothing in the standing instructions covers Main-Gate-PR-time trunk
+drift, only `build/{ref}`-drift (§2, step 5/6). It correctly diagnosed
+and rebased `ready/MAG-46` onto current `origin/main` unprompted, keeping
+the 3-commit structure intact. Architect review of the build commit found
+one genuinely unrequested piece of scope: a `branchExists` precondition
+check on the quick route's PR-raise action, with a failure-return branch
+neither the spec nor the test-phase route's own precedent asked for —
+the sole cause of new-line coverage sitting at exactly 90% against a
+strict `>90%` threshold. Relayed directly; `build-implementer` improved
+on the instruction given — the immutable test (`pr-raised.test.ts` §3.1)
+turned out to genuinely require the bare `branchExists` call itself (not
+inherited for free from the derivation pipeline, as first assumed), just
+not the dead branch around it. Kept the call, removed only the branch;
+coverage cleared to 100%.
+
+**Known debt:** the surviving `branchExists(headBranch, { remote: true })`
+call in `promote.ts`'s quick-route `pr-raised` action
+(`commands/promote.ts`, inside the `phase === "quick"` block) is now
+functionally inert in production — its result is discarded, nothing
+branches on it — kept solely because `pr-raised.test.ts` §3.1 asserts
+the call happened. Not worth reopening an already-merged, gate-passed
+test PR to relax one assertion for a single harmless read-only git call.
+Revisit if `promote/quick-route-pr-raised.test.ts` is ever touched again
+for an unrelated reason.
+
+**Confirmed via real e2e testing, ahead of PR #103's merge** (per the
+standing discipline — mocked-green is necessary, not sufficient; both
+`isAncestor` and `rebase()` shipped through fully-green mocked suites
+before failing for real): built the CLI directly off `ready/MAG-46` in a
+throwaway worktree, then ran it — via absolute path, from a *second*
+worktree checked out on a real, disposable `task/ZZZZ-971` branch off
+`main` — against real git and real GitHub, not mocks. One setup mistake
+caught along the way: running `main-gate` (which rebuilds as part of its
+own `build` check) from the *same* worktree after switching it to
+`task/ZZZZ-971` silently clobbered the freshly-built `ready/MAG-46` CLI
+with `origin/main`'s old one — hence the two-worktree split, one pinned
+purely as the build artifact, the other purely as the git state under
+test.
+
+- `promote` on `quick::ready` genuinely opened
+  [PR #105](https://github.com/weaver-engineering/magpie-weaver/pull/105)
+  (`task/ZZZZ-971` → `main`) — confirmed independently via `gh pr view`,
+  not just the tool's own claimed output.
+- `status --ref ZZZZ-971` correctly derived `phase: "quick", state:
+  "awaiting-pr"` afterward.
+- A repeated `promote` call was genuinely idempotent: `action: "none"`,
+  re-stated PR #105, and `gh pr list --head task/ZZZZ-971` confirmed no
+  second PR was ever created.
+
+Disposable ref fully cleaned up afterward: PR #105 closed unmerged,
+`task/ZZZZ-971` deleted (local and remote), both scratch worktrees
+removed. `quick::blocked` (§3.2) wasn't separately e2e'd — pure read +
+relay, no new git/gh interaction beyond what §3.1/§3.3 already exercised
+for real.
+
 ## Previous scope: spec 11 (done)
 
 **Merged via [PR #95](https://github.com/weaver-engineering/magpie-weaver/pull/95)**
