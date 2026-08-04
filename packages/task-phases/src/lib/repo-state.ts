@@ -93,8 +93,32 @@ async function derivePhase(
   throw new Error("not implemented");
 }
 
-/** Derives the no-PR branch-exists `PhaseState` (specs 06 + 09): no
- * commits beyond `main` → `not-started`; commits exist → `ready?`, unless
+/** The parent branch a phase's state is derived against — spec 10 §2.1's
+ * correction: a phase is `not-started` when it has no commit **of its
+ * own**, i.e. comparing against the branch it forked from, not `main`.
+ * A freshly-forked `test/{ref}` carries no own commits, so it reports
+ * `not-started` even though it inherits `spec/{ref}`'s history. The
+ * spec/quick `origin/main` entries are MAG-46-10.01's correction — this
+ * chunk keeps the pre-existing `"main"` parent for them. `build` is
+ * unreachable here (its states are all PR-driven, MEL-46-11/12/15), but
+ * its parent is recorded for when it lands. */
+function deriveParentBranch(phase: Phase, ref: string): string {
+  switch (phase) {
+    case "test":
+      return `spec/${ref}`;
+    case "build":
+      return `origin/build/${ref}`;
+    case "spec":
+    case "quick":
+      // 10.01 brings `origin/main`; unchanged here so the already-merged
+      // spec/quick state assertions (which pin "main") stay valid.
+      return "main";
+  }
+}
+
+/** Derives the no-PR branch-exists `PhaseState` (specs 06 + 09, corrected
+ * per spec 10 §2.1): no commits beyond the phase's **own parent branch**
+ * (`deriveParentBranch`) → `not-started`; commits exist → `ready?`, unless
  * the head commit is WIP-marked, which holds derivation at
  * `work-in-progress` (§3.7) — a WIP-marked head never reaches `ready?`.
  * `ready?`/`ready`/`blocked` *resolution* itself is `resolveReady()`'s
@@ -106,9 +130,11 @@ async function derivePhase(
  * `work-in-progress`. */
 async function deriveState(
   tools: ExternalTools,
+  phase: Phase,
+  ref: string,
   canonicalBranch: string,
 ): Promise<TaskState> {
-  if (!(await tools.git.hasCommitsBeyond(canonicalBranch, "main"))) {
+  if (!(await tools.git.hasCommitsBeyond(canonicalBranch, deriveParentBranch(phase, ref)))) {
     return "not-started";
   }
   const title = await tools.git.headCommitTitle(canonicalBranch);
@@ -191,7 +217,7 @@ export async function deriveRepoState(
   await assertNoGatePR(tools, ref);
 
   const { phase, canonicalBranch } = await derivePhase(tools, ref);
-  const state = await deriveState(tools, canonicalBranch);
+  const state = await deriveState(tools, phase, ref, canonicalBranch);
 
   return {
     ref,
