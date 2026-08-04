@@ -142,6 +142,25 @@ out to be structurally impossible: git can't create a branch named
 `main/anything` while `main` itself exists as a branch; see `task/MAG-30`
 for the rename).
 
+**Spec 06.01's own test corrected for the open-Build-Gate-PR case** —
+quick-route commit (`task/MAG-46`), landed ahead of MAG-46-11's own test
+phase, which is what actually surfaced it: MAG-46-11's required behavior
+(`status`/`promote` deriving real `awaiting-pr` for an open Build Gate
+PR) directly contradicted `defers-when-gate-pr-exists.test.ts` §3.2
+(same exact scenario, asserting the opposite — deferral). Not a spec
+mistake; `assertNoGatePR`'s own comment always said this case was
+temporary, owned by a later chunk. Removed §3.2 rather than rewriting it
+in place — the correct behavior is MAG-46-11's own test-phase work
+(`status/awaiting-pr.test.ts`, per its test-file-layout note), not
+something to preempt here. §3.1/§3.3/§3.4 (merged Build Gate PR, both
+Main Gate PR cases) are untouched, still correctly deferred, still owned
+by MAG-46-12/15. Landed via the quick route specifically because
+`main-gate`'s task/{ref} path has no `validate-test-commit`-style
+"existing tests unchanged" check (confirmed by reading
+`validate-task-commit.ts` before choosing this route) — no architect
+override needed, unlike the spec-06/09 contradiction earlier, which hit
+that check directly on the build route.
+
 **`pnpm task init` now commits and pushes the doc it scaffolds** —
 quick-route commit (`task/MAG-46`, no ticket of its own — a tooling fix
 to `task-phases` itself, dog-fooding the CLI for the first time revealed
