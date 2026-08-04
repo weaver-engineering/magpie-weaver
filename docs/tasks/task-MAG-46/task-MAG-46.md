@@ -215,41 +215,68 @@ checks first and leaves an existing doc untouched, reporting `written:
 false`; `init` skips `--commit` entirely when nothing was written, rather
 than attempting an empty commit.
 
-## Current Scope: spec 09
+## Current Scope: spec 10
 
-**Working spec doc:**
-`task-MAG-46-09-status-check-ready-or-blocked-spec.md` (copied alongside
-this file). Makes `ready?` reachable and resolvable via `pnpm task status
-[--ref <ref>] [--check] [--json]`: `lib/repo-state.ts`'s `deriveState()`
-gains the WIP-marker check (distinguishing `ready?` from
-`work-in-progress` — it already calls `headCommitTitle()` but discards
-the result), a new `resolveReady(tools, status)` is added to
-`lib/repo-state.ts` as a pure pass-through for any non-`ready?` status
-(called by `status.ts` only when `--check` is given, and designed for
-`promote`, MAG-46-10/11, to reuse unconditionally), and `status.ts` gets
-the `--ref`+`--check` refusal rule (LLD §3.9).
+**Working spec doc:** `task-MAG-46-10-promote-forked-spec.md` (copied
+alongside this file). The first real `promote` behavior: finding
+`spec/{ref}` in state `ready` (resolved via `resolveReady()`,
+unconditionally — no `--check`-style flag, unlike `status`), `promote`
+creates `test/{ref}` off `spec/{ref}` and returns the worktree to
+`spec/{ref}` (the branch-restoration invariant, LLD §2.1 — see below).
+Finding `spec/{ref}` `blocked`, takes no git action and relays the gate's
+own violations directly. Also lands the `branchMismatch` guard (LLD §3.4)
+that gates every `promote` action from here on: refuses outright when
+`currentBranch != canonicalBranch`.
 
-**Pre-handoff spec review caught a real inconsistency before this went
-to test-writer:** the spec's own original Deliverable Note directed
-baking gate-check resolution into the *shared* `deriveState()`/
-`deriveRepoState()` pipeline (used by every command, including the
-not-yet-built `list`) — which directly contradicts the LLD's explicit
-rule that only `promote` (always) and `status --check` (opt-in) resolve
-`ready?`, and self-contradicted the spec's own required behavior that
-`gateChecks.run` must **not** be called on a plain `status` read.
-Corrected in place (see the spec doc's own §2.1) to the
-`resolveReady()`-in-`lib/`-but-called-by-`status.ts` shape above, per
-architect+user discussion. Also added two required behaviors the spec
-was missing entirely: a WIP-marked head never resolving to `ready?`, and
-`resolveReady()`'s own pass-through guarantee under direct unit test.
+**Pre-handoff spec review went through two passes before this reached
+test-writer.** First pass (magpieweaver-docs#79): the spec's own
+Deliverable Notes directed calling `tools.gateChecks.run` directly to
+resolve `ready?`, duplicating logic `resolveReady()` (MAG-46-09) already
+owns — corrected. That pass also changed §3.1's post-fork state from
+`not-started` to `ready?`, reasoning that `test/{ref}` inherits
+`spec/{ref}`'s commits so `hasCommitsBeyond` is `true` from creation —
+**this was wrong, and is corrected in the second pass below.**
 
-**Third real `pnpm task init MAG-46 --commit` run** — `spec/MAG-46`
+Second pass (magpieweaver-docs#80), prompted by checking the design
+against the actual dev-machine setup (one clone, several linked
+worktrees sharing a ref namespace) rather than the single-worktree model
+the LLD assumed:
+
+* **Phase state is derived against the phase's own parent branch, not
+  against `main`.** `deriveState()` passing the literal `"main"` for
+  every phase measures the *task's* total progress and reports it as the
+  *phase's* state — which is exactly how the first pass arrived at
+  `ready?`. A phase is `not-started` when it has no commit *of its own*:
+  `spec`/`quick` derive against `origin/main`, `test` against
+  `spec/{ref}`, `build` against `origin/build/{ref}`. §3.1 goes back to
+  `not-started`, correctly this time — asserting the parent is
+  `spec/AAA-123`, not `main`. Recorded as a general rule in LLD §3.2.
+* **The fork must restore the starting branch.** `createBranch` is `git
+  checkout -b`, and git allows a branch to be checked out in only one
+  worktree at a time — an unrestored fork run by the architect on
+  `spec/{ref}` leaves `test/{ref}` checked out in the architect's
+  worktree, locking the agent out of it. `promote` now calls
+  `checkout("spec/{ref}")` after creating `test/{ref}`. This is now a
+  general invariant (LLD §2.1): a command leaves the worktree on the
+  branch it found it on, except `<ref>`/`status --fix`, whose purpose is
+  to switch. The resulting `branchMismatch: true` is the expected
+  consequence, not a refusal condition.
+
+Both corrected in place in the spec doc (§2.1/§3.1) and the LLD (§2.1,
+§3.2), landed via magpieweaver-docs#80. Specs 10.01 and 11 also picked up
+corrections in the same pass — `origin/main` instead of local `main` as
+the drift reference (10.01), and `promote` creating `build/{ref}` from
+`origin/main` when absent, which nothing earlier in the workflow does
+(11) — recorded in their own docs, not repeated here since neither is
+this chunk's scope.
+
+**Fourth real `pnpm task init MAG-46 --commit` run** — `spec/MAG-46`
 (along with `test/build/ready/MAG-46`) was cleared down again once spec
-08's full cycle (spec→test→build) merged to `main`, confirming the
-clear-down-per-cycle practice holds for a third cycle in a row. Same
-shape as specs 07/08's: `init` correctly left the already-existing task
-doc untouched (`--commit` was a no-op as a result); the spec doc itself
-was still copied in by hand (`--specs` remains MAG-46-18's).
+09's full cycle (spec→test→build) merged to `main`, confirming the
+clear-down-per-cycle practice holds for a fourth cycle in a row. Same
+shape as specs 07/08/09's: `init` correctly left the already-existing
+task doc untouched (`--commit` was a no-op as a result); the spec doc
+itself was still copied in by hand (`--specs` remains MAG-46-18's).
 
 **Phase ownership unchanged:** specification is architect-owned (this
 chunk's spec commit is already done); test and build are for the agent.

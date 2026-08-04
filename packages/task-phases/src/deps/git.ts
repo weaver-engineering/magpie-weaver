@@ -6,9 +6,12 @@
  * Spec 01 implements `fetch`, `currentBranch`, `branchExists`, `headSha`,
  * `createBranch`, `checkout`, `commitAll`, `push`. Spec 05.01 implements
  * `isDirty`, `hasCommitsBeyond`, `headCommitTitle`, `pullFastForward`,
- * `deleteBranch`. Spec 07 implements `changedFiles`. The remaining methods
- * (`mergeBase`, `isAncestor`, `rebase`) still throw — real implementations
- * land with the chunk that owns them (MAG-46-13).
+ * `deleteBranch`. Spec 07 implements `changedFiles`. `isAncestor` landed
+ * early (real, in `packages/task-phases/src/deps/git.ts`) to unblock the
+ * spec 10 `promote` success path, which re-derives the post-fork status via
+ * `deriveRepoState()` and reaches it. The remaining methods (`mergeBase`,
+ * `rebase`) still throw — real implementations land with the chunk that
+ * owns them (MAG-46-13).
  */
 
 import { execFile } from "node:child_process";
@@ -181,8 +184,36 @@ export class RealGitTool implements GitTool {
     return { added, changed, deleted };
   }
 
-  isAncestor(_ancestor: string, _descendant: string): Promise<boolean> {
-    throw new Error("not implemented");
+  /** `git merge-base --is-ancestor <ancestor> <descendant>` — determines
+   * whether `<ancestor>` is an ancestor of `<descendant>`. Exit code 0
+   * means true, exit code 1 a legitimate false (as the interface's
+   * docstring notes), and anything else (e.g. an unknown ref, exit 128) a
+   * genuine error — which is surfaced via git's own stderr, or a generic
+   * message when git produced none. Read the exit code via execFile
+   * directly (the same pattern `pullFastForward` uses) because simple-git
+   * treats a nonzero exit as a failure only when it's accompanied by
+   * stderr, and `merge-base --is-ancestor`'s exit-1 `false` is silent. */
+  async isAncestor(ancestor: string, descendant: string): Promise<boolean> {
+    try {
+      await execFileAsync(
+        "git",
+        ["merge-base", "--is-ancestor", ancestor, descendant],
+        { cwd: this.cwd, encoding: "utf-8" },
+      );
+      return true;
+    } catch (error) {
+      const err = error as { code?: number; stderr?: string | Buffer };
+      if (err.code === 1) {
+        return false;
+      }
+      const stderrText = (err.stderr ?? "").toString().trim();
+      throw new Error(
+        stderrText.length > 0
+          ? stderrText
+          : `git merge-base --is-ancestor ${ancestor} ${descendant} failed (exit code ${err.code ?? "unknown"})`,
+        { cause: error },
+      );
+    }
   }
 
   /** `git checkout -b <newBranch> <fromRef>` — creates `newBranch` off
