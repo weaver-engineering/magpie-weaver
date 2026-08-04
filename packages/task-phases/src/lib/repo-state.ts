@@ -42,13 +42,14 @@ async function anyPhaseBranchExists(
 /** The §3.2 merge-status/open-PR stage, run *before* the branch-exists
  * derivation. Returns a `TaskStatus` for the PR-driven state this chunk
  * owns, or `null` when no owned PR drives the state (so branch-exists
- * derivation applies). Merged PRs on any gate pair, and open Main Gate
- * PRs on either route, still defer ("not implemented") — those states
- * (`merged-pending-pull`, `merged-pending-cleanup`, and the Main-Gate
- * `awaiting-pr`) are owned by later chunks (MAG-46-12/15). Only the open
- * Build Gate PR (`test/{ref}` -> `build/{ref}`) derives real state here:
- * `awaiting-pr`, attached to the **source** phase of that PR — `test`,
- * never the destination `build` (spec 11 §3.2/§3.4). */
+ * derivation applies). Merged PRs on any gate pair, and the regular route's
+ * open Main Gate PR, still defer ("not implemented") — those states
+ * (`merged-pending-pull`, `merged-pending-cleanup`, and the regular
+ * route's Main-Gate `awaiting-pr`) are owned by later chunks (MAG-46-12/15).
+ * The open Build Gate PR (`test/{ref}` -> `build/{ref}`) derives `awaiting-pr`
+ * attached to the **source** phase `test` (spec 11 §3.2/§3.4); the open quick
+ * route's Main Gate PR (`main`/`task/{ref}`) derives `awaiting-pr` attached to
+ * the source phase `quick` (spec 11.01 §3.4) — never the destination. */
 async function derivePrState(
   tools: ExternalTools,
   ref: string,
@@ -63,8 +64,26 @@ async function derivePrState(
     }
     const open = await tools.github.findOpenPR(baseName, headName);
     if (open !== null) {
-      // Only the open Build Gate PR is this chunk's real derivation; the
-      // two Main Gate routes stay deferred to MAG-46-12/15.
+      // The quick route's open Main Gate PR (`main`/`task/{ref}`) is this
+      // chunk's extension of the awaiting-pr resolution: `awaiting-pr`
+      // attached to the **source** phase of that PR — `quick`, never the
+      // destination `main` (spec 11.01 §3.4, §2.1's one-derivation-for-all-
+      // routes). The regular route's open Main Gate PR
+      // (`main`/`build/{ref}`) and both merged pairs still defer to
+      // MAG-46-12/15.
+      if (base === "main" && head === "task/{ref}") {
+        const canonicalBranch = `task/${ref}`;
+        return {
+          ref,
+          phase: "quick",
+          canonicalBranch,
+          currentBranch,
+          branchMismatch: currentBranch !== canonicalBranch,
+          state: "awaiting-pr",
+        };
+      }
+      // Only the open Build Gate PR (`test/{ref}` -> `build/{ref}`) is the
+      // other real derivation; the regular Main Gate route stays deferred.
       if (base !== "build/{ref}") {
         throw new Error("not implemented");
       }

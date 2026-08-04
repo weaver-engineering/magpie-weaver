@@ -175,16 +175,21 @@ export async function promote(
     };
   }
 
-  // An open Build Gate PR derives `awaiting-pr` on the test phase (spec 11
-  // §3.3). `promote` is a safe, idempotent no-op here — the PR is already
-  // open, so neither the branch nor the PR is (re)created; the existing
-  // PR's number is re-stated rather than a generic "nothing to do".
+  // An open gate PR derives `awaiting-pr` — on the `test` phase for the
+  // Build Gate PR (spec 11 §3.3) and on the `quick` phase for the quick
+  // route's Main Gate PR (spec 11.01 §3.3). `promote` is a safe, idempotent
+  // no-op here — the PR is already open, so neither the branch nor the PR is
+  // (re)created; the existing PR's number is re-stated rather than a generic
+  // "nothing to do". The PR pair consulted matches the derived phase's route.
   if (taskStatus.state === "awaiting-pr") {
     const messages = [
       `Current branch \`${currentBranch}\` - ref: ${ref}`,
       stateLine(ref, taskStatus.phase, taskStatus.state),
     ];
-    const open = await tools.github.findOpenPR(`build/${ref}`, `test/${ref}`);
+    const open =
+      taskStatus.phase === "quick"
+        ? await tools.github.findOpenPR("main", `task/${ref}`)
+        : await tools.github.findOpenPR(`build/${ref}`, `test/${ref}`);
     if (open !== null) {
       messages.push(`PR #${open.number} is open for ${ref}: ${open.url}`);
     }
@@ -250,6 +255,31 @@ export async function promote(
     }
     const pr = await tools.github.createPR(buildBranch, headBranch, {
       title: `Task ${ref}: promote ${ref}::test::ready to build (Build Gate)`,
+    });
+    return {
+      success: true,
+      action: "pr-raised",
+      prNumber: pr.number,
+      prUrl: pr.url,
+      messages: [
+        `Current branch \`${currentBranch}\` - ref: ${ref}`,
+        stateLine(ref, taskStatus.phase, taskStatus.state),
+        `PR #${pr.number} opened for ${ref}: ${pr.url}`,
+      ],
+    };
+  }
+
+  // The quick::ready -> pr-raised action (spec 11.01 §3.1): raise the Main
+  // Gate PR directly against `main` (`task/{ref}` -> `main`). Unlike the
+  // test-phase route there is NO branch-publish step first — the base
+  // `main` always exists, so no `git.createRemoteBranch`/`createBranch`/
+  // `checkout` are touched (§2.1); the publish step exists in the test-phase
+  // route only because nothing in the workflow creates `build/{ref}`.
+  if (taskStatus.state === "ready" && taskStatus.phase === "quick") {
+    const headBranch = `task/${ref}`;
+    await tools.git.branchExists(headBranch, { remote: true });
+    const pr = await tools.github.createPR("main", headBranch, {
+      title: `Task ${ref}: promote ${ref}::quick::ready to main (Main Gate)`,
     });
     return {
       success: true,
