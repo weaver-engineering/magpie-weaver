@@ -274,12 +274,49 @@ violations, same shape as every other blocked case.
   System-behaviors comment. §3.1/§3.3 (the two merged-PR pairs) are
   untouched, still correctly deferred, still owned by MAG-46-12/15. All
   102 remaining task-phases tests pass; real coverage for this case moves
-  to `status/awaiting-pr.test.ts` as MAG-46-11.01's own test-phase work.
+  to a new `status/awaiting-pr-quick-route.test.ts` (see the file-layout
+  correction below — not `status/awaiting-pr.test.ts` as first assumed
+  here).
 
-**Not yet started:** `spec/MAG-46` needs recreating fresh from `main`
-(cleared down after spec 11's Main Gate merge, per standing process) and
-the spec doc above copied in as the spec-phase commit, before `test-writer`
-can be handed this chunk.
+**`spec/MAG-46` recreated, spec-phase commit raised** (`1766242`), and
+`test-writer` started headlessly on `test/MAG-46`
+(`ses_031f6cad1ffeLoMMvV5W0DpoVW`, `agent_1`). It self-derived the
+correct state despite `agent_1`'s worktree still sitting on the now-gone
+`ready/MAG-46` from spec 11's build session — fetched, forked
+`test/MAG-46` off `spec/MAG-46` itself, no intervention needed for that
+part.
+
+**A third pre-handoff-review miss, this time caught by `test-writer`
+itself rather than the architect:** `task-MAG-46-test-file-layout-design.md`'s
+§4 table had MAG-46-11.01 §3.4 (the quick-route `status` case) *"adding a
+case to the existing `status/awaiting-pr.test.ts`"*, citing §5 (a spec
+doc gaining sections within *itself* later, e.g. MAG-46-06's own
+§3.5–3.7 growth). Wrong citation: MAG-46-11.01 is a distinct, later spec
+doc that merely shares MAG-46-11's territory — an ordinary §4
+split-by-command new-file case, exactly like its own §3.1–3.3 row
+directly above, which already correctly named a new file. `test-writer`
+caught it at session start, before writing anything: the "existing file"
+directive is incompatible with both `build-gate`'s `validate-test-commit`
+check and every agent's own standing mandate against editing existing
+test files — a conflict invisible until a *second* chunk's tests target
+a file a *prior, already-merged* chunk created, which the original table
+row never considered. Reported `needs-architect-intervention` cleanly,
+no uncommitted work. Fixed in `magpieweaver-docs` (both the layout
+doc's table + a correction note, and the working spec doc's own "Test
+file" header) — new file `status/awaiting-pr-quick-route.test.ts`, same
+treatment as the sibling row. **`spec/MAG-46` itself was deliberately
+left unamended**: `test/MAG-46` had already forked from it, and rewriting
+`spec/MAG-46`'s single commit would flip the ancestry-staleness check
+(`derivePhase`'s `isAncestor` guard), routing `promote` into the
+rebase-forward path and the known-broken `rebase()` stub (MAG-46-13's
+deferred tier-1 gap, confirmed broken via e2e testing after spec 10.01) —
+the fix was relayed to the live `test-writer` session directly instead.
+Adds a fourth instance to the growing "pre-handoff review gap" list
+(spec 09, spec 11's own §3.2, this chunk's §3.4-deferral case, now this)
+— worth its own line on the pre-handoff checklist in
+`sequenced-spec-supervision-CLAUDE.md`: cross-check a spec's named test
+file against every already-merged chunk's own file-layout row, not just
+its behavioral assertions.
 
 ## Previous scope: spec 11 (done)
 
