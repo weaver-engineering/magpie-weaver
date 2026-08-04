@@ -63,6 +63,14 @@ export interface GitTool {
   /** Local only — does not push; callers must follow up with `push()`. */
   createBranch(newBranch: string, fromRef: string): Promise<void>;
 
+  /** `git push origin <fromRef>:refs/heads/<newBranch>` — publishes an
+   * already-existing ref `fromRef` (e.g. `origin/main`) to a newly-named
+   * branch `newBranch` (e.g. `build/{ref}`) on `origin`, without creating
+   * or checking `newBranch` out locally (spec 11 §3.1.1, git.interface.ts).
+   * Throws if `newBranch` already exists on origin (the caller checks
+   * `branchExists` first). */
+  createRemoteBranch(newBranch: string, fromRef: string): Promise<void>;
+
   checkout(branch: string): Promise<void>;
 
   commitAll(title: string, message?: string): Promise<string>;
@@ -226,6 +234,16 @@ export class RealGitTool implements GitTool {
   /** `git checkout <branch>` — switches to an already-existing branch. */
   async checkout(branch: string): Promise<void> {
     await this.git.raw(["checkout", branch]);
+  }
+
+  /** `git push origin <fromRef>:refs/heads/<newBranch>` — publishes an
+   * already-existing ref `fromRef` (e.g. `origin/main`) to a newly-named
+   * branch `newBranch` (e.g. `build/{ref}`) on `origin` straight, without
+   * creating or checking `newBranch` out locally — the base branch a
+   * `gh pr create --base build/{ref}` would 422 against if it didn't exist
+   * (spec 11 §2.1/§3.1.1). */
+  async createRemoteBranch(newBranch: string, fromRef: string): Promise<void> {
+    await this.git.raw(["push", "origin", `${fromRef}:refs/heads/${newBranch}`]);
   }
 
   /** `git add -A && git commit -m "<title>" [-m "<message>"]`, then

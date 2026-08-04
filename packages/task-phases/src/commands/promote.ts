@@ -175,6 +175,26 @@ export async function promote(
     };
   }
 
+  // An open Build Gate PR derives `awaiting-pr` on the test phase (spec 11
+  // §3.3). `promote` is a safe, idempotent no-op here — the PR is already
+  // open, so neither the branch nor the PR is (re)created; the existing
+  // PR's number is re-stated rather than a generic "nothing to do".
+  if (taskStatus.state === "awaiting-pr") {
+    const messages = [
+      `Current branch \`${currentBranch}\` - ref: ${ref}`,
+      stateLine(ref, taskStatus.phase, taskStatus.state),
+    ];
+    const open = await tools.github.findOpenPR(`build/${ref}`, `test/${ref}`);
+    if (open !== null) {
+      messages.push(`PR #${open.number} is open for ${ref}: ${open.url}`);
+    }
+    return {
+      success: true,
+      action: "none",
+      messages,
+    };
+  }
+
   // The spec::ready -> forked action: create `test/{ref}` off `spec/{ref}`,
   // then restore the starting branch (branch-restoration invariant, §2.1).
   // Creating a branch checks it out (`git checkout -b`), so we must return
@@ -212,6 +232,35 @@ export async function promote(
       success: true,
       action: "forked",
       messages,
+    };
+  }
+
+  // The test::ready -> pr-raised action (spec 11 §3.1/§3.1.1): raise the
+  // Build Gate PR (`test/{ref}` -> `build/{ref}`). Nothing earlier in the
+  // workflow creates `build/{ref}`, so when it's absent on origin it is
+  // first published from `origin/main` — a PR cannot be opened against a
+  // base branch that isn't there (it would 422). The branch is created
+  // straight on origin, never checked out locally (would take a worktree
+  // slot for a branch the test/build phases never work on, §2.1).
+  if (taskStatus.state === "ready" && taskStatus.phase === "test") {
+    const buildBranch = `build/${ref}`;
+    const headBranch = `test/${ref}`;
+    if (!(await tools.git.branchExists(buildBranch, { remote: true }))) {
+      await tools.git.createRemoteBranch(buildBranch, "origin/main");
+    }
+    const pr = await tools.github.createPR(buildBranch, headBranch, {
+      title: `Task ${ref}: promote ${ref}::test::ready to build (Build Gate)`,
+    });
+    return {
+      success: true,
+      action: "pr-raised",
+      prNumber: pr.number,
+      prUrl: pr.url,
+      messages: [
+        `Current branch \`${currentBranch}\` - ref: ${ref}`,
+        stateLine(ref, taskStatus.phase, taskStatus.state),
+        `PR #${pr.number} opened for ${ref}: ${pr.url}`,
+      ],
     };
   }
 
