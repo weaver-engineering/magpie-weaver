@@ -234,43 +234,102 @@ checks first and leaves an existing doc untouched, reporting `written:
 false`; `init` skips `--commit` entirely when nothing was written, rather
 than attempting an empty commit.
 
-## Current Scope: spec 10.01
+## Current Scope: spec 11
 
-**Working spec doc:** `task-MAG-46-10-01-promote-rebase-forward-spec.md`
-(copied alongside this file). The two plain rebase-forward triggers from
-LLD §3.5 that were missed between spec 10 and MAG-46-14: spec amended
-under an already-forked `test/{ref}`, and `origin/main` drifting ahead of
-`spec/{ref}`/`task/{ref}`. `git.rebase` is mocked (the real primitive is
-still MAG-46-13's, not yet built — see the note below); this chunk is
-about `promote` correctly detecting each trigger and calling `rebase()`
-with the right arguments.
+**Working spec doc:**
+`task-MAG-46-11-status-awaiting-pr-and-promote-pr-raised-spec.md` (copied
+alongside this file). Replaces `lib/repo-state.ts`'s `assertNoGatePR()`
+(currently an unconditional `"not implemented"` throw the moment any gate
+PR exists) with real derivation for the Build Gate PR pair specifically:
+`test::ready` → `promote` creates `build/{ref}` from `origin/main` when
+absent, then raises the PR (`action: "pr-raised"`); once open,
+`status`/`promote` report `phase: "test", state: "awaiting-pr"`, and a
+repeated `promote` call is a safe, idempotent no-op. The Main-Gate-PR
+pairs stay deferred to MAG-46-12/15, unchanged.
 
-**Pre-handoff spec review found one real gap before this went to
-test-writer:** §3.1's rebase target (`test/{ref}`) is a *different*
-branch from the caller's own (`spec/{ref}`), and `rebase()`'s contract
-(`git rebase --onto <ontoRef> <upstream> <branch>`) checks `<branch>` out
-as part of the operation, same as `createBranch` does for spec 10's fork.
-Left unfixed, `promote` would reproduce spec 10's exact worktree-exclusivity
-bug: a successful (or conflicted) rebase-forward leaves the architect's
-tree parked on `test/{ref}`, locking the agent's worktree out of it.
-Fixed the same way spec 10 was: `promote` now restores the caller's
-starting branch (`checkout("spec/{ref}")`) after `rebase()` actually ran
-— §3.1 (`ok`) and §3.5 (`conflict`, discovered mid-replay, after the
-checkout already happened) both need it; §3.6
-(`unexpected-commit-count`) does not, since that precondition is a plain
-`rev-list --count` checked *before* any checkout is attempted, and
-§3.2/§3.3 don't either, since there the branch being rebased already is
-the currently-checked-out one. Corrected in place in the spec doc's own
-§2.1/§3.1/§3.5/§3.6.
+**Pre-handoff spec review, this time explicitly including the
+shim-dependency check agreed after spec 10.01's build** (per
+`notes/sequenced-spec-supervision-CLAUDE.md`, magpieweaver-docs): traced
+every `deps/*.ts` method this chunk's logic reaches at runtime.
+`git.branchExists`/`git.push`/`github.findOpenPR`/`github.createPR` are
+all real. `derivePhase()`'s own `isAncestor` staleness check still fires
+whenever `test/{ref}` exists (unconditional, unaffected by this chunk),
+and is already real. The `rebase`-trigger detection spec 10.01 added only
+fires for `phase === "spec" | "quick"` — this chunk operates on `phase:
+"test"`, so it's never reached. **No new dependency on a stubbed shim
+method** — clean on this front, no tier decision needed.
 
-**Not fixed here, flagged for awareness:** the spec doc still says (§1)
-"the real primitive was proven in MAG-46-13" as settled fact — true of
-the LLD's intended order, not our actual one, where MAG-46-13 comes
-*after* this chunk. Since every test here is fully mocked, it doesn't
-block this chunk's own cycle, but it means `rebase()` is still a real
-stub when this merges — the same class of gap spec 10 hit with
-`isAncestor` (see below), not yet decided whether to pull `rebase()`
-forward too or wait for MAG-46-13.
+Also re-checked spec 11's own corrections (made earlier, before 10.01
+existed) against the current code: `assertNoGatePR` is unchanged and
+still unconditionally throws, so the "replace this function" instruction
+is still accurate; the new `rebase`-trigger logic doesn't interact with
+the PR-aware short-circuit this chunk adds (a task with an open Build
+Gate PR returns `awaiting-pr` before reaching the rebase-detection code
+at all).
+
+**Correction: "no further corrections needed" above was wrong** — the
+shim-dependency check traced runtime *code* paths, not existing *test*
+assertions, and missed a real, direct contradiction: this chunk's own
+required behavior (real `awaiting-pr` for an open Build Gate PR) is the
+exact scenario `defers-when-gate-pr-exists.test.ts` §3.2 already asserted
+the opposite outcome for. `test-writer` caught it correctly at session
+start — re-derived state, read the spec, found the conflict before
+writing anything, reported `needs-architect-intervention` cleanly with no
+uncommitted work. Fixed by retiring §3.2 (not rewriting it — the correct
+behavior is this chunk's own `status/awaiting-pr.test.ts` to write),
+landed via the quick route rather than an architect override, since
+`main-gate`'s `task/{ref}` path has no existing-tests-unchanged check.
+See the Progress section entry near spec 06.01 for the full detail; PR
+#93.
+
+This is now a named gap in the pre-handoff review process, not just this
+one miss: checking whether a chunk's *code* touches a stubbed shim is a
+different question from checking whether a chunk's *required behavior*
+contradicts an existing test's specific assertion — spec 09's contradiction
+earlier and this one are both instances of the second question, and
+neither was caught by a systematic check, only by whoever happened to
+read the right file. Worth adding as its own explicit item to the
+pre-handoff checklist in `sequenced-spec-supervision-CLAUDE.md`
+(magpieweaver-docs), not folded into the shim-dependency check.
+
+## Previous scope: spec 10.01 (done)
+
+**Working spec doc:** `task-MAG-46-10-01-promote-rebase-forward-spec.md`.
+The two plain rebase-forward triggers from LLD §3.5 that were missed
+between spec 10 and MAG-46-14: spec amended under an already-forked
+`test/{ref}`, and `origin/main` drifting ahead of `spec/{ref}`/
+`task/{ref}`. Merged via
+[PR #91](https://github.com/weaver-engineering/magpie-weaver/pull/91)
+(test) and [PR #92](https://github.com/weaver-engineering/magpie-weaver/pull/92)
+(build).
+
+**Pre-handoff spec review found one real gap:** §3.1's rebase target
+(`test/{ref}`) is a *different* branch from the caller's own
+(`spec/{ref}`), and `rebase()`'s contract (`git rebase --onto <ontoRef>
+<upstream> <branch>`) checks `<branch>` out as part of the operation,
+same as `createBranch` does for spec 10's fork — reproducing spec 10's
+exact worktree-exclusivity bug if left unfixed. Fixed the same way:
+`promote` restores the caller's starting branch after `rebase()`
+actually ran (§3.1 `ok`, §3.5 `conflict` — discovered mid-replay, after
+the checkout already happened); §3.6 (`unexpected-commit-count`) needs no
+restoration, since that precondition is a plain `rev-list --count`
+checked *before* any checkout; §3.2/§3.3 need none either, since there
+the branch being rebased already is the currently-checked-out one.
+
+**Confirmed via real e2e testing after merge: `rebase()` crashes for
+real**, same class of gap as spec 10's `isAncestor` — `RealGitTool.rebase`
+is still a stub. Unlike `isAncestor`, this is genuinely tier-1 material
+(per `notes/thin-shims-implement-wholesale.md`'s three-tier framework):
+`rebase()` derives `upstream` via `mergeBase`, checks a commit-count
+precondition, runs the actual `git rebase --onto`, and has real
+conflict-handling semantics — complex enough to warrant durable automated
+coverage, not a same-PR patch. **Confirmed this does not block spec 11**:
+the rebase-trigger path only fires for `phase: "spec" | "quick"`; spec
+11 operates on `phase: "test"` and never reaches it. Left MAG-46-13 in
+its existing backlog position rather than pulling it forward — it will
+bite the architect's own use of `promote --confirm-rebase` (the only
+caller, since it's spec/quick-phase-only) until MAG-46-13 lands, not any
+agent's own cycle.
 
 ## Previous scope: spec 10 (done)
 

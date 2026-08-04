@@ -165,6 +165,7 @@ const DEV_TESTING_TOOLS: Record<
       changedFiles: [],
       isAncestor: ["ancestor", "descendant"],
       createBranch: ["newBranch", "fromRef"],
+      createRemoteBranch: ["newBranch", "fromRef"],
       checkout: ["branch"],
       commitAll: ["title", "message"],
       push: ["branch", "opts"],

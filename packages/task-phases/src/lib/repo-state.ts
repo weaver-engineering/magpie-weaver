@@ -39,24 +39,47 @@ async function anyPhaseBranchExists(
   return false;
 }
 
-/** Defers ("not implemented") if any gate PR exists for `ref` — a merged
- * or open PR on any of the three gate pairs (§3.1-§3.4). This runs
- * *before* the branch-exists derivation, so a PR-present task never
- * silently misreports as `not-started`/`work-in-progress`. The PR-driven
- * states (`awaiting-pr`, `merged-pending-pull`, `merged-pending-cleanup`)
- * are owned by later chunks (MAG-46-11/12/15); until they land, an
- * existing PR means the caller cannot answer authoritatively. */
-async function assertNoGatePR(tools: ExternalTools, ref: string): Promise<void> {
+/** The §3.2 merge-status/open-PR stage, run *before* the branch-exists
+ * derivation. Returns a `TaskStatus` for the PR-driven state this chunk
+ * owns, or `null` when no owned PR drives the state (so branch-exists
+ * derivation applies). Merged PRs on any gate pair, and open Main Gate
+ * PRs on either route, still defer ("not implemented") — those states
+ * (`merged-pending-pull`, `merged-pending-cleanup`, and the Main-Gate
+ * `awaiting-pr`) are owned by later chunks (MAG-46-12/15). Only the open
+ * Build Gate PR (`test/{ref}` -> `build/{ref}`) derives real state here:
+ * `awaiting-pr`, attached to the **source** phase of that PR — `test`,
+ * never the destination `build` (spec 11 §3.2/§3.4). */
+async function derivePrState(
+  tools: ExternalTools,
+  ref: string,
+  currentBranch: string,
+): Promise<TaskStatus | null> {
   for (const [base, head] of GATE_PR_PAIRS) {
     const baseName = base.replace("{ref}", ref);
     const headName = head.replace("{ref}", ref);
+    // A merged PR is unconditional deferral on every pair (§3.1/§3.3).
     if ((await tools.github.findMergedPR(baseName, headName)) !== null) {
       throw new Error("not implemented");
     }
-    if ((await tools.github.findOpenPR(baseName, headName)) !== null) {
-      throw new Error("not implemented");
+    const open = await tools.github.findOpenPR(baseName, headName);
+    if (open !== null) {
+      // Only the open Build Gate PR is this chunk's real derivation; the
+      // two Main Gate routes stay deferred to MAG-46-12/15.
+      if (base !== "build/{ref}") {
+        throw new Error("not implemented");
+      }
+      const canonicalBranch = `test/${ref}`;
+      return {
+        ref,
+        phase: "test",
+        canonicalBranch,
+        currentBranch,
+        branchMismatch: currentBranch !== canonicalBranch,
+        state: "awaiting-pr",
+      };
     }
   }
+  return null;
 }
 
 /** Derives the phase whose branch is currently authoritative for `ref`,
@@ -216,7 +239,10 @@ export async function deriveRepoState(
     };
   }
 
-  await assertNoGatePR(tools, ref);
+  const prState = await derivePrState(tools, ref, currentBranch);
+  if (prState !== null) {
+    return prState;
+  }
 
   const { phase, canonicalBranch, staleTestBranch } = await derivePhase(tools, ref);
   const state = await deriveState(tools, phase, ref, canonicalBranch);
