@@ -906,6 +906,16 @@ text output. Added `"printf *"` alongside `echo *`.
   `.opencode/tool/*.ts` and its `@opencode-ai/plugin` import itself at
   runtime; it isn't part of this repo's pnpm workspace or TS project.
 
+## 3aw. `"git reflog*"` was missing entirely
+
+`build-implementer`, starting MAG-46's spec 11.01 build phase, hit an
+unexpected step-3 result (local `main` behind `origin/main`) and ran `git
+reflog ready/MAG-46` while investigating — a read-only, informational
+command with no entry at all, despite `git log*`/`git show*` already
+being allowed and no more capable of anything beyond displaying local ref
+history. Added `"git reflog*"` to all three agents, alongside `git
+log*`.
+
 ## 5. Acceptance criteria
 
 - Three sub-agent config files exist under `.opencode/agent/`, each with
