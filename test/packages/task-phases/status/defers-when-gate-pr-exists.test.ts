@@ -22,6 +22,19 @@
  * none of those pairs are MAG-46-11's scope, still correctly deferred,
  * still owned by MAG-46-12/15.
  *
+ * **Correction (MAG-46, quick-route architect fix, ahead of MAG-46-11.01):**
+ * the former §3.4 case — "defers when the Main Gate PR (quick route) is
+ * open" — is retired for the identical reason §3.2 was: MAG-46-11.01 derives
+ * real `phase: "quick", state: "awaiting-pr"` for an open `main`/`task/{ref}`
+ * PR instead of deferring, directly contradicting what this file asserted.
+ * Retested for real in `status/awaiting-pr.test.ts` (MAG-46-11.01's own test
+ * file, extending MAG-46-11's, per the test-file-layout note) — not
+ * rewritten in place here, for the same reason as §3.2's retirement. §3.1/
+ * §3.3 remain untouched: the `build/{ref}`/`test/{ref}` merged pair and the
+ * `main`/`build/{ref}` merged pair are outside MAG-46-11.01's scope (which
+ * only touches the open `main`/`task/{ref}` pair), still correctly deferred,
+ * still owned by MAG-46-12/15.
+ *
  * Same in-process pattern as specs 04/06: `run(argv, tools)` is called
  * directly with an injected `ExternalTools` whose `git`/`github` members
  * are test doubles — no real git/gh/fs calls anywhere. Unlike spec 06,
@@ -39,8 +52,9 @@
  */
 
 // Implements: task-MAG-46-06-01-status-defers-when-gate-pr-exists-spec.md
-// System behaviors: 1.5.6, 1.5.8, 1.5.9 (1.5.7 retired — see correction
-// note above; retested for real in status/awaiting-pr.test.ts, MAG-46-11)
+// System behaviors: 1.5.6, 1.5.8 (1.5.7, 1.5.9 retired — see correction
+// notes above; retested for real in status/awaiting-pr.test.ts, MAG-46-11
+// and MAG-46-11.01 respectively)
 
 import { afterEach, describe, expect, it, vi, type Mock } from "vitest";
 import { run } from "../../../../packages/task-phases/src/cli.js";
@@ -84,15 +98,6 @@ function mergedPR(over: Partial<MergedPullRequestSummary> = {}): MergedPullReque
     mergedAt: "2026-08-01T00:00:00Z",
     headRefOid: "1111111111111111111111111111111111111111",
     mergeCommitOid: "2222222222222222222222222222222222222222",
-    ...over,
-  };
-}
-
-/** A fully-shaped `PullRequestSummary` (gh.ts §4.9). */
-function openPR(over: Partial<PullRequestSummary> = {}): PullRequestSummary {
-  return {
-    number: 43,
-    url: "https://github.com/weaver-engineering/magpie-weaver/pull/43",
     ...over,
   };
 }
@@ -252,30 +257,6 @@ describe("status: defers when a gate PR exists", () => {
     // The Main Gate pair (build/{ref} -> main) was consulted and its
     // merged PR triggered the deferral.
     expect(mocks.findMergedPR).toHaveBeenCalledWith("main", "build/AAA-103");
-
-    expect(mocks.hasCommitsBeyond).not.toHaveBeenCalled();
-    expect(mocks.headCommitTitle).not.toHaveBeenCalled();
-  });
-
-  it("defers when the Main Gate PR (quick route) is open, without deriving from branches (§3.4)", async () => {
-    const { tools, mocks } = buildTools({
-      branchExists: existsOnly("task/AAA-104"),
-      findMergedPR: vi.fn().mockResolvedValue(null),
-      findOpenPR: prOnlyFor(["main", "task/AAA-104"], openPR()),
-    });
-    const cap = captureStdout();
-    const code = await run(["node", "cli.js", "status", "--ref", "AAA-104"], tools);
-    const stdout = cap.stdout();
-    cap.restore();
-
-    expect(code).toBe(1);
-    expect(stdout).toContain("not implemented");
-
-    expect(mocks.fetch).toHaveBeenCalledTimes(1);
-
-    // Every merged check comes back null, but the open Main Gate PR on the
-    // quick route (task/{ref} -> main) still triggers deferral.
-    expect(mocks.findOpenPR).toHaveBeenCalledWith("main", "task/AAA-104");
 
     expect(mocks.hasCommitsBeyond).not.toHaveBeenCalled();
     expect(mocks.headCommitTitle).not.toHaveBeenCalled();
