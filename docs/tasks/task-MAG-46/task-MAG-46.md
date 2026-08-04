@@ -234,6 +234,53 @@ checks first and leaves an existing doc untouched, reporting `written:
 false`; `init` skips `--commit` entirely when nothing was written, rather
 than attempting an empty commit.
 
+## Current Scope: spec 11.01
+
+**Working spec doc:**
+`task-MAG-46-11-01-promote-quick-route-pr-raised-spec.md`, authored in
+`magpieweaver-docs` (`docs/setup/dev-env/task-phasing/`), not yet copied
+into this repo's `docs/tasks/task-MAG-46/` — that copy is the spec-phase
+commit itself, still to be raised on a freshly-recreated `spec/MAG-46`.
+Closes a gap MAG-46-11 explicitly left open: that chunk only covered the
+`test`-phase PR-raise (`test/{ref}` → `build/{ref}`); the quick route's
+own `promote`-to-PR action (`task/{ref}` → `main` directly, LLD §3.7's
+gate table) had no spec at all until this chunk. Extends the same
+`deriveRepoState()` awaiting-pr resolution MAG-46-11 added — one
+derivation function covering all routes — with the `main`/`task/{ref}`
+open-PR pair: `quick::ready` → `promote` raises the Main Gate PR directly
+(no branch-publish step first, unlike the test-phase route — `main`
+always exists already); once open, `status`/`promote` report `phase:
+"quick", state: "awaiting-pr"`; a repeated `promote` call is the same
+idempotent no-op as MAG-46-11's. `quick::blocked` relays `main-gate`'s
+violations, same shape as every other blocked case.
+
+**Pre-handoff spec review:**
+
+- **Shim-dependency check:** the quick-route `pr-raised` action needs
+  only `github.createPR`/`findOpenPR`/`findMergedPR` (all real) — no new
+  `git.*` primitive, since (unlike `build/{ref}`) `main` never needs
+  publishing first. Clean, no tier decision needed.
+- **Existing-test contradiction check found a real hit** — the second
+  time this specific check has caught something, after spec 11's own
+  §3.2 case: `test/packages/task-phases/status/defers-when-gate-pr-exists.test.ts`
+  §3.4 ("defers when the Main Gate PR (quick route) is open") asserted an
+  open `main`/`task/{ref}` PR still produces `"not implemented"` —
+  directly contradicting this chunk's required §3.4 behavior (real
+  `awaiting-pr`). Same root cause as spec 11's §3.2 hit: `assertNoGatePR`'s
+  replacement was always going to land in stages, and this test predated
+  the stage that covers it. **Fixed via the quick route** (`task/MAG-46`):
+  retired the §3.4 case with a correction note (same treatment as §3.2),
+  removed the now-unused `openPR()` test helper, renumbered the file's
+  System-behaviors comment. §3.1/§3.3 (the two merged-PR pairs) are
+  untouched, still correctly deferred, still owned by MAG-46-12/15. All
+  102 remaining task-phases tests pass; real coverage for this case moves
+  to `status/awaiting-pr.test.ts` as MAG-46-11.01's own test-phase work.
+
+**Not yet started:** `spec/MAG-46` needs recreating fresh from `main`
+(cleared down after spec 11's Main Gate merge, per standing process) and
+the spec doc above copied in as the spec-phase commit, before `test-writer`
+can be handed this chunk.
+
 ## Previous scope: spec 11 (done)
 
 **Merged via [PR #95](https://github.com/weaver-engineering/magpie-weaver/pull/95)**
