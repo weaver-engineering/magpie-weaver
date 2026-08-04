@@ -50,6 +50,7 @@ permission:
     "git stash*": allow
     "git tag*": allow
     "git rev-list*": allow
+    "git reflog*": allow
     "git ls-tree*": allow
     "git worktree*": allow
     "git rm*": allow
