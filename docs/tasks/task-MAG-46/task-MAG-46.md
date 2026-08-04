@@ -215,18 +215,58 @@ checks first and leaves an existing doc untouched, reporting `written:
 false`; `init` skips `--commit` entirely when nothing was written, rather
 than attempting an empty commit.
 
-## Current Scope: spec 10
+## Current Scope: spec 10.01
 
-**Working spec doc:** `task-MAG-46-10-promote-forked-spec.md` (copied
-alongside this file). The first real `promote` behavior: finding
-`spec/{ref}` in state `ready` (resolved via `resolveReady()`,
-unconditionally — no `--check`-style flag, unlike `status`), `promote`
-creates `test/{ref}` off `spec/{ref}` and returns the worktree to
-`spec/{ref}` (the branch-restoration invariant, LLD §2.1 — see below).
-Finding `spec/{ref}` `blocked`, takes no git action and relays the gate's
-own violations directly. Also lands the `branchMismatch` guard (LLD §3.4)
-that gates every `promote` action from here on: refuses outright when
-`currentBranch != canonicalBranch`.
+**Working spec doc:** `task-MAG-46-10-01-promote-rebase-forward-spec.md`
+(copied alongside this file). The two plain rebase-forward triggers from
+LLD §3.5 that were missed between spec 10 and MAG-46-14: spec amended
+under an already-forked `test/{ref}`, and `origin/main` drifting ahead of
+`spec/{ref}`/`task/{ref}`. `git.rebase` is mocked (the real primitive is
+still MAG-46-13's, not yet built — see the note below); this chunk is
+about `promote` correctly detecting each trigger and calling `rebase()`
+with the right arguments.
+
+**Pre-handoff spec review found one real gap before this went to
+test-writer:** §3.1's rebase target (`test/{ref}`) is a *different*
+branch from the caller's own (`spec/{ref}`), and `rebase()`'s contract
+(`git rebase --onto <ontoRef> <upstream> <branch>`) checks `<branch>` out
+as part of the operation, same as `createBranch` does for spec 10's fork.
+Left unfixed, `promote` would reproduce spec 10's exact worktree-exclusivity
+bug: a successful (or conflicted) rebase-forward leaves the architect's
+tree parked on `test/{ref}`, locking the agent's worktree out of it.
+Fixed the same way spec 10 was: `promote` now restores the caller's
+starting branch (`checkout("spec/{ref}")`) after `rebase()` actually ran
+— §3.1 (`ok`) and §3.5 (`conflict`, discovered mid-replay, after the
+checkout already happened) both need it; §3.6
+(`unexpected-commit-count`) does not, since that precondition is a plain
+`rev-list --count` checked *before* any checkout is attempted, and
+§3.2/§3.3 don't either, since there the branch being rebased already is
+the currently-checked-out one. Corrected in place in the spec doc's own
+§2.1/§3.1/§3.5/§3.6.
+
+**Not fixed here, flagged for awareness:** the spec doc still says (§1)
+"the real primitive was proven in MAG-46-13" as settled fact — true of
+the LLD's intended order, not our actual one, where MAG-46-13 comes
+*after* this chunk. Since every test here is fully mocked, it doesn't
+block this chunk's own cycle, but it means `rebase()` is still a real
+stub when this merges — the same class of gap spec 10 hit with
+`isAncestor` (see below), not yet decided whether to pull `rebase()`
+forward too or wait for MAG-46-13.
+
+## Previous scope: spec 10 (done)
+
+**Working spec doc:** `task-MAG-46-10-promote-forked-spec.md`. The first
+real `promote` behavior: finding `spec/{ref}` in state `ready` (resolved
+via `resolveReady()`, unconditionally — no `--check`-style flag, unlike
+`status`), `promote` creates `test/{ref}` off `spec/{ref}` and returns
+the worktree to `spec/{ref}` (the branch-restoration invariant, LLD
+§2.1). Finding `spec/{ref}` `blocked`, takes no git action and relays the
+gate's own violations directly. Also lands the `branchMismatch` guard
+(LLD §3.4) that gates every `promote` action from here on: refuses
+outright when `currentBranch != canonicalBranch`. Merged via
+[PR #88](https://github.com/weaver-engineering/magpie-weaver/pull/88)
+(test) and [PR #89](https://github.com/weaver-engineering/magpie-weaver/pull/89)
+(build).
 
 **Pre-handoff spec review went through two passes before this reached
 test-writer.** First pass (magpieweaver-docs#79): the spec's own
@@ -270,11 +310,34 @@ the drift reference (10.01), and `promote` creating `build/{ref}` from
 (11) — recorded in their own docs, not repeated here since neither is
 this chunk's scope.
 
-**Fourth real `pnpm task init MAG-46 --commit` run** — `spec/MAG-46`
+**Build phase crashed on real e2e testing, mocked tests never caught
+it.** `promote`'s merged build (PR #89 as first raised) passed all 92
+mocked tests and CI cleanly, but crashed for real the moment it was run
+end-to-end against a genuine ready spec branch: `promote`'s post-fork
+re-derivation (§2.1's "surface the branchMismatch consequence" step)
+calls `deriveRepoState()` a second time, which reaches
+`RealGitTool.isAncestor` — a stub, deliberately deferred to MAG-46-13 —
+the instant `test/{ref}` exists. My first suggested fix (skip the
+re-derivation) was itself wrong and retracted before the agent acted on
+it: `forked.test.ts` (already merged, immutable) explicitly asserts
+`isAncestor` gets called. The real fix — implementing
+`RealGitTool.isAncestor` for real, in `deps/git.ts`, via
+`git merge-base --is-ancestor` — landed instead, ahead of MAG-46-13,
+with the architect authorizing any coverage-gate friction in advance
+(none was actually needed: `deps/*.ts` is excluded from coverage
+measurement by an existing, documented policy — proof of correctness for
+that file class is meant to come from `--dev-testing` tests, which don't
+exist for `isAncestor` yet). Verified independently three ways before
+merge: diff review, CI reproduced locally, and a second real disposable
+ready-spec branch confirming no crash. See
+`notes/thin-shims-implement-wholesale.md` (magpieweaver-docs) for the
+general lesson this incident produced.
+
+**Fifth real `pnpm task init MAG-46 --commit` run** — `spec/MAG-46`
 (along with `test/build/ready/MAG-46`) was cleared down again once spec
-09's full cycle (spec→test→build) merged to `main`, confirming the
-clear-down-per-cycle practice holds for a fourth cycle in a row. Same
-shape as specs 07/08/09's: `init` correctly left the already-existing
+10's full cycle (spec→test→build) merged to `main`, confirming the
+clear-down-per-cycle practice holds for a fifth cycle in a row. Same
+shape as specs 07/08/09/10's: `init` correctly left the already-existing
 task doc untouched (`--commit` was a no-op as a result); the spec doc
 itself was still copied in by hand (`--specs` remains MAG-46-18's).
 

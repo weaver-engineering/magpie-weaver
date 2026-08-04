@@ -67,24 +67,26 @@ async function assertNoGatePR(tools: ExternalTools, ref: string): Promise<void> 
 async function derivePhase(
   tools: ExternalTools,
   ref: string,
-): Promise<{ phase: Phase; canonicalBranch: string }> {
+): Promise<{ phase: Phase; canonicalBranch: string; staleTestBranch: boolean }> {
   const testBranch = `test/${ref}`;
   const specBranch = `spec/${ref}`;
   const taskBranch = `task/${ref}`;
 
   if (await tools.git.branchExists(testBranch)) {
     // Staleness check (§3.5): `spec/{ref}` amended after `test/{ref}`
-    // forked makes spec authoritative — test is simply not consulted.
+    // forked makes spec authoritative — test is simply not consulted. The
+    // flag itself is surfaced to `deriveRepoState`, whose §3.5 rebase-forward
+    // detection turns it into the "rebase test/{ref} onto spec/{ref}" trigger.
     if (!(await tools.git.isAncestor(specBranch, testBranch))) {
-      return { phase: "spec", canonicalBranch: specBranch };
+      return { phase: "spec", canonicalBranch: specBranch, staleTestBranch: true };
     }
-    return { phase: "test", canonicalBranch: testBranch };
+    return { phase: "test", canonicalBranch: testBranch, staleTestBranch: false };
   }
   if (await tools.git.branchExists(specBranch)) {
-    return { phase: "spec", canonicalBranch: specBranch };
+    return { phase: "spec", canonicalBranch: specBranch, staleTestBranch: false };
   }
   if (await tools.git.branchExists(taskBranch)) {
-    return { phase: "quick", canonicalBranch: taskBranch };
+    return { phase: "quick", canonicalBranch: taskBranch, staleTestBranch: false };
   }
   // A phase branch exists (anyPhaseBranchExists returned true) but none
   // of the three derivable phases matches — the only remaining prefix is
@@ -216,8 +218,31 @@ export async function deriveRepoState(
 
   await assertNoGatePR(tools, ref);
 
-  const { phase, canonicalBranch } = await derivePhase(tools, ref);
+  const { phase, canonicalBranch, staleTestBranch } = await derivePhase(tools, ref);
   const state = await deriveState(tools, phase, ref, canonicalBranch);
+
+  // §3.5 rebase-forward detection: `deriveRepoState` surfaces (but never
+  // acts on) the two plain-rebase situations `promote` must resolve. The two
+  // are mutually exclusive per invocation (§2.1) — whichever the derivation
+  // actually surfaced wins. The staleness fallback is the more specific
+  // trigger (a real test/{ref} branch is behind the amended spec/{ref}), so
+  // it takes precedence over trunk drift.
+  //
+  // Trunk drift is measured against `origin/main`, not local `main` (§2.1's
+  // correction): a local `main` is an ordinary branch that only moves when
+  // something moves it, so it is not a live view of the trunk and deriving
+  // "behind the trunk" against it can produce a false negative. This is an
+  // `isAncestor` check, distinct from `deriveState`'s `hasCommitsBeyond`
+  // parent comparison, which stays on the pre-existing `"main"` parent.
+  let rebase: { branch: string; onto: string } | undefined;
+  if (staleTestBranch) {
+    rebase = { branch: `test/${ref}`, onto: canonicalBranch };
+  } else if (phase === "spec" || phase === "quick") {
+    const trunk = "origin/main";
+    if (!(await tools.git.isAncestor(trunk, canonicalBranch))) {
+      rebase = { branch: canonicalBranch, onto: trunk };
+    }
+  }
 
   return {
     ref,
@@ -226,5 +251,6 @@ export async function deriveRepoState(
     currentBranch,
     branchMismatch: currentBranch !== canonicalBranch,
     state,
+    ...(rebase !== undefined && { rebase }),
   };
 }
