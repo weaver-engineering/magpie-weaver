@@ -234,7 +234,10 @@ checks first and leaves an existing doc untouched, reporting `written:
 false`; `init` skips `--commit` entirely when nothing was written, rather
 than attempting an empty commit.
 
-## Current Scope: spec 11
+## Previous scope: spec 11 (done)
+
+**Merged via [PR #95](https://github.com/weaver-engineering/magpie-weaver/pull/95)**
+(spec+test+build bundled on `ready/MAG-46`, per the established pattern).
 
 **Working spec doc:**
 `task-MAG-46-11-status-awaiting-pr-and-promote-pr-raised-spec.md` (copied
@@ -291,6 +294,34 @@ neither was caught by a systematic check, only by whoever happened to
 read the right file. Worth adding as its own explicit item to the
 pre-handoff checklist in `sequenced-spec-supervision-CLAUDE.md`
 (magpieweaver-docs), not folded into the shim-dependency check.
+
+**Phase branches cleared down after the Main Gate merge**: `test/MAG-46`,
+`build/MAG-46`, `ready/MAG-46` deleted (remote and local), `spec/MAG-46`
+deleted and will be recreated fresh from `main` for the next chunk, same
+treatment as every prior cycle.
+
+**Quick-route follow-up, merged via
+[PR #97](https://github.com/weaver-engineering/magpie-weaver/pull/97)
+(`task/MAG-46`, reset fresh from `main` first — its one prior unmerged
+commit turned out content-identical to what PR #93 had already squashed
+in, so nothing was lost resetting it):**
+
+- **`git.interface.ts` folded in, file deleted.** PR #95's build commit
+  added `createRemoteBranch` directly to `GitTool`/`RealGitTool` in
+  `git.ts`, exactly as the pinned standalone interface (Finding 2,
+  `design-workflow-findings.md`) required — but left the now-redundant
+  pinned file in place instead of deleting it, and two doc comments
+  (`git.ts`, `promote/pr-raised.test.ts`) still pointed at it as a live
+  source of truth. Deleted the file, confirmed nothing else references
+  `GitToolBranchCreation`, reworded both comments. All 103 task-phases
+  tests pass; `tsc` build clean.
+- **`"pnpm build*"` (no `-r`) permission added** to
+  `build-implementer`/`test-writer`/`quick-scaffolder`, alongside the
+  existing `"pnpm -r build*"`. Confirmed live gap from the MAG-40
+  bootstrap session: `pnpm build` run at a fresh agent worktree's root
+  (equivalent to `pnpm -r build` per the root `package.json` script, but
+  a textually different invocation) didn't match the existing glob and
+  needed a manual click-allow.
 
 ## Previous scope: spec 10.01 (done)
 
