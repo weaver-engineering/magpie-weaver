@@ -102,6 +102,7 @@ permission:
     "head *": allow
     "tail *": allow
     "grep *": allow
+    "rg *": allow
     "awk *": allow
     "wc *": allow
     "tr *": allow
