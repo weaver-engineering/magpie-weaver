@@ -78,6 +78,7 @@ permission:
     "pnpm test*": allow
     "pnpm --filter*": allow
     "pnpm -r build*": allow
+    "pnpm build*": allow
     "pnpm install*": allow
     "pnpm exec eslint*": allow
     "pnpm exec vitest*": allow

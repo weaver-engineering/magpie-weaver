@@ -66,7 +66,7 @@ export interface GitTool {
   /** `git push origin <fromRef>:refs/heads/<newBranch>` — publishes an
    * already-existing ref `fromRef` (e.g. `origin/main`) to a newly-named
    * branch `newBranch` (e.g. `build/{ref}`) on `origin`, without creating
-   * or checking `newBranch` out locally (spec 11 §3.1.1, git.interface.ts).
+   * or checking `newBranch` out locally (spec 11 §3.1.1).
    * Throws if `newBranch` already exists on origin (the caller checks
    * `branchExists` first). */
   createRemoteBranch(newBranch: string, fromRef: string): Promise<void>;

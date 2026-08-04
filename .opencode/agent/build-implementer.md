@@ -91,6 +91,7 @@ permission:
     "pnpm exec task*": allow
     "pnpm vitest*": allow
     "pnpm -r build*": allow
+    "pnpm build*": allow
     "timeout *": allow
     "sed -n*": allow
     "python3*": allow

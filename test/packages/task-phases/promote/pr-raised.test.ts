@@ -14,8 +14,7 @@
  *      creation happens.
  *   2. When `build/{ref}` does NOT exist on origin, `promote` first
  *      publishes it from `origin/main` via `git.createRemoteBranch`
- *      (pinned in packages/task-phases/src/deps/git.interface.ts —
- *      `git push origin origin/main:refs/heads/build/{ref}`, §2.1), and
+ *      (`git push origin origin/main:refs/heads/build/{ref}`, §2.1), and
  *      that creation happens *before* `github.createPR` (§3.1.1).
  *   3. Once the PR is open, a repeated `promote` call is an idempotent,
  *      safe no-op: `action: "none"`, `github.createPR` NOT called again,
