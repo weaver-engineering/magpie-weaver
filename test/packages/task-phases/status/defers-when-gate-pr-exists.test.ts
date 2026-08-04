@@ -5,6 +5,23 @@
  * no-PR branch-exists derivation (task-MAG-46-06-01-status-defers-when-
  * gate-pr-exists-spec.md, LLD §3.2).
  *
+ * **Correction (MAG-46, quick-route architect fix, ahead of MAG-46-11):**
+ * the original §3.2 case here — "defers when the Build Gate PR is open" —
+ * has been removed. It asserted the case MAG-46-06.01's own comment on
+ * `assertNoGatePR()` always said was temporary: "The PR-driven states
+ * (awaiting-pr, merged-pending-pull, merged-pending-cleanup) are owned by
+ * later chunks (MAG-46-11/12/15); until they land, an existing PR means
+ * the caller cannot answer authoritatively." MAG-46-11 is exactly that
+ * later chunk for the open-Build-Gate-PR case: `status`/`promote` now
+ * derive real `awaiting-pr` for it instead of deferring, which directly
+ * contradicts what this file's old §3.2 asserted. That behavior is
+ * retested for real in `status/awaiting-pr.test.ts` (MAG-46-11's own test
+ * file, per its test-file-layout note) — not rewritten in place here,
+ * since covering it is MAG-46-11's test-phase work, not an architect
+ * correction to make on its behalf. §3.1/§3.3/§3.4 below are untouched —
+ * none of those pairs are MAG-46-11's scope, still correctly deferred,
+ * still owned by MAG-46-12/15.
+ *
  * Same in-process pattern as specs 04/06: `run(argv, tools)` is called
  * directly with an injected `ExternalTools` whose `git`/`github` members
  * are test doubles — no real git/gh/fs calls anywhere. Unlike spec 06,
@@ -22,7 +39,8 @@
  */
 
 // Implements: task-MAG-46-06-01-status-defers-when-gate-pr-exists-spec.md
-// System behaviors: 1.5.6, 1.5.7, 1.5.8, 1.5.9
+// System behaviors: 1.5.6, 1.5.8, 1.5.9 (1.5.7 retired — see correction
+// note above; retested for real in status/awaiting-pr.test.ts, MAG-46-11)
 
 import { afterEach, describe, expect, it, vi, type Mock } from "vitest";
 import { run } from "../../../../packages/task-phases/src/cli.js";
@@ -212,29 +230,6 @@ describe("status: defers when a gate PR exists", () => {
 
     // The branch-exists derivation (MAG-46-06) genuinely wasn't reached
     // (§2.1) — not merely that the right message came out.
-    expect(mocks.hasCommitsBeyond).not.toHaveBeenCalled();
-    expect(mocks.headCommitTitle).not.toHaveBeenCalled();
-  });
-
-  it("defers when the Build Gate PR is open, without deriving from branches (§3.2)", async () => {
-    const { tools, mocks } = buildTools({
-      branchExists: existsOnly("test/AAA-102"),
-      findMergedPR: vi.fn().mockResolvedValue(null),
-      findOpenPR: prOnlyFor(["build/AAA-102", "test/AAA-102"], openPR()),
-    });
-    const cap = captureStdout();
-    const code = await run(["node", "cli.js", "status", "--ref", "AAA-102"], tools);
-    const stdout = cap.stdout();
-    cap.restore();
-
-    expect(code).toBe(1);
-    expect(stdout).toContain("not implemented");
-
-    expect(mocks.fetch).toHaveBeenCalledTimes(1);
-
-    // No merged PR on the pair, but the open one still triggers deferral.
-    expect(mocks.findOpenPR).toHaveBeenCalledWith("build/AAA-102", "test/AAA-102");
-
     expect(mocks.hasCommitsBeyond).not.toHaveBeenCalled();
     expect(mocks.headCommitTitle).not.toHaveBeenCalled();
   });
