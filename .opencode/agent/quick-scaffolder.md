@@ -29,6 +29,9 @@ permission:
     "*": ask
     "git status*": allow
     "git rev-parse*": allow
+    "git -C * rev-parse*": allow
+    "git cat-file*": allow
+    "pwd*": allow
     "git branch*": allow
     "git remote*": allow
     "git fetch*": allow
@@ -122,6 +125,7 @@ permission:
     "xxd *": allow
     "which *": allow
     "ls *": allow
+    "stat *": allow
     "mkdir *": allow
 ---
 
