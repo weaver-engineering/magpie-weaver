@@ -978,6 +978,33 @@ machine resolves — both trivial, read-only diagnostics with zero
 mutation capability, same class as `gh --version*` (already allowed).
 Added `"git --version*"` and `"which *"` to all three agents.
 
+## 3be. `"git cat-file*"`, `"pwd*"`, and `"git -C * rev-parse*"` were all missing entirely
+
+`test-writer`, investigating a trunk-drift merge-base discrepancy while
+starting spec 14 (`promote` resolves `merged-pending-pull`) against a
+stale-looking `origin/main` ref, ran `git cat-file -t <sha>` to confirm
+an object's existence, `pwd` to confirm its own working directory, and
+`git -C <path> rev-parse <ref>` to inspect the plain reference checkout
+(`MagpieWeaver/magpie-weaver`) from inside the worktree session — all
+read-only. The first two were simply never added; the third is a
+structural gap in every existing `"git <subcommand>*"` pattern: a
+leading `-C <path>` flag means the command no longer starts with `git
+<subcommand>`, so none of the existing allow patterns match regardless
+of which subcommand follows. Added `"git cat-file*"`, `"pwd*"`, and
+`"git -C * rev-parse*"` to all three agents — only the `-C` + `rev-parse`
+combination actually seen so far, not a blanket `"git -C *"`, consistent
+with this doc's existing per-subcommand granularity; other `-C`-prefixed
+subcommands remain point additions if/when they're actually hit.
+
+## 3bf. `"stat*"` was missing entirely
+
+`test-writer`, sanity-checking why some previously-unmatched commands
+were now sailing through mid-session, ran `stat -f '%Sm %N'
+.opencode/agent/test-writer.md` to check the permission file's own
+modification time against `git log -1`'s commit time — confirming the
+live-patch (§3be) had actually landed. Read-only, same class as `ls`/
+`cat`/`head`. Added `"stat *"` to all three agents.
+
 ## 5. Acceptance criteria
 
 - Three sub-agent config files exist under `.opencode/agent/`, each with
