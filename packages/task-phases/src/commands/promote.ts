@@ -8,8 +8,17 @@ import { deriveRepoState, resolveReady } from "../lib/repo-state.js";
 
 /**
  * `pnpm task promote [--json]` — see task-phasing-lld.md §3.11. This chunk
- * (MAG-46-10) implements the first real `promote` action: finding
- * `spec/{ref}` resolved `ready` (via `resolveReady()`, called
+ * (MAG-46-14) implements the `merged-pending-pull` resolution: the Build
+ * Gate PR merged but local `build/{ref}` doesn't yet reflect it (derived in
+ * MAG-46-12), so `promote` either plain-pulls it (no local `build/{ref}` —
+ * `action: "pulled"`, no confirmation, §3.1) or pulls AND rebases the
+ * pre-existing build commits onto the fresh merge (`action:
+ * "pulled-and-rebased"`, gated by `--confirm-rebase` or an interactive y/N
+ * prompt, §3.2/§3.6), surfacing conflicts / unexpected commit counts via
+ * `rebaseOutcome` rather than silently resolving them (§3.4/§3.5).
+ *
+ * Earlier chunks: MAG-46-10 implemented the first real `promote` action:
+ * finding `spec/{ref}` resolved `ready` (via `resolveReady()`, called
  * **unconditionally** — unlike `status`, which only resolves with `--check`),
  * create `test/{ref}` off `spec/{ref}` and return the worktree to
  * `spec/{ref}` (LLD §2.1's branch-restoration invariant — its first
@@ -48,6 +57,25 @@ function stateLine(ref: string, phase: Phase | null, state: TaskState): string {
   const refPart = ref === "" ? "-" : ref;
   const phasePart = phase === null ? "-" : phase;
   return `Task::Phase::State ${refPart}::${phasePart}::${state}`;
+}
+
+/** Reads a single line of confirmation input from `process.stdin` for the
+ *  interactive y/N path (spec 14 §3.6) — mirrors `cli.ts`'s `readStdin()`
+ *  technique (`data`/`end` events, read to completion) rather than
+ *  introducing `readline` or any new primitive. This is CLI-layer I/O —
+ *  reading a human's own confirmation off stdin is the same category as
+ *  the messages `promote` already writes to stdout, NOT an
+ *  `ExternalTools` member (spec 14 §2.1's correction). */
+function readConfirmation(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let data = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => {
+      data += chunk;
+    });
+    process.stdin.on("end", () => resolve(data));
+    process.stdin.on("error", reject);
+  });
 }
 
 export async function promote(
@@ -197,6 +225,152 @@ export async function promote(
       success: true,
       action: "none",
       messages,
+    };
+  }
+
+  // The merged-pending-pull resolution (spec 14): the Build Gate PR
+  // (`test/{ref}` -> `build/{ref}`) has merged and local `build/{ref}`
+  // doesn't yet reflect it (MAG-46-12's derivation). `promote` consumes
+  // that derived state — it never re-checks `build/{ref}`'s ancestry
+  // itself (§2.1) — and resolves it one of two ways, distinguished by
+  // whether a local `build/{ref}` exists:
+  //
+  // §3.1 plain pull: no local `build/{ref}` — nothing pre-existing to
+  // reorder. Fast-forward it locally (`pullFastForward` creates it from
+  // origin when absent), no confirmation needed — non-destructive.
+  //
+  // §3.2/§3.6 cascading: local `build/{ref}` exists with pre-existing
+  // build-phase commits. Pull AND rebase them onto the fresh merge
+  // (`origin/build/{ref}`), then force-push — gated by `--confirm-rebase`
+  // or an interactive y/N prompt (§3.6), exactly like every other rewrite
+  // in this design. A missing confirmation in `--json` mode refuses with
+  // no git action at all (§3.3).
+  //
+  // A rebase conflict (§3.4) or unexpected commit count (§3.5) is surfaced
+  // via `rebaseOutcome`, never silently resolved — the pull half of the
+  // action DID complete, so action stays "pulled-and-rebased"; only the
+  // force-push is withheld.
+  if (taskStatus.state === "merged-pending-pull") {
+    const buildBranch = taskStatus.canonicalBranch as string;
+    const ontoRef = `origin/${buildBranch}`;
+
+    // Promote's own plain-vs-cascading decision: does a local build/{ref}
+    // exist with pre-existing build commits to reorder? (The derived state
+    // covers both sub-cases — no local branch, or local behind origin — so
+    // the existence check is what distinguishes them.)
+    const localBuildExists = await tools.git.branchExists(buildBranch, { remote: false });
+
+    if (!localBuildExists) {
+      // §3.1: plain pull — non-destructive, no confirmation required.
+      await tools.git.pullFastForward(buildBranch);
+      return {
+        success: true,
+        action: "pulled",
+        messages: [
+          `Current branch \`${currentBranch}\` - ref: ${ref}`,
+          `Pulled \`${buildBranch}\` to match \`${ontoRef}\` (merged Build Gate PR)`,
+        ],
+      };
+    }
+
+    // Cascading case: pull + rebase, gated by confirmation.
+    const confirmed = args["confirm-rebase"] === true;
+    if (!confirmed) {
+      if (args["json"] === true) {
+        // §3.3: refuse cleanly — no git action at all, name the flag.
+        return {
+          success: false,
+          action: "none",
+          messages: [
+            `Current branch \`${currentBranch}\` - ref: ${ref}`,
+            `Promoting ${ref}::${taskStatus.phase}::${taskStatus.state} requires a rebase: \`${buildBranch}\` has pre-existing build commits that must be rebased onto the merged Build Gate content`,
+            `This is a force-pushed branch rewrite - confirm with --confirm-rebase to proceed`,
+            `No action taken`,
+          ],
+        };
+      }
+      // §3.6: interactive y/N prompt — shown before any rebase/push is
+      // attempted, answer read off process.stdin (CLI-layer I/O, spec 14
+      // §2.1's correction — not an ExternalTools member).
+      process.stdout.write(`Rebase \`${buildBranch}\` onto \`${ontoRef}\`? [y/N] `);
+      const answer = await readConfirmation();
+      if (answer.trim().toLowerCase() !== "y") {
+        return {
+          success: false,
+          action: "none",
+          messages: [
+            `Current branch \`${currentBranch}\` - ref: ${ref}`,
+            `Confirmation declined - no action taken`,
+          ],
+        };
+      }
+    }
+
+    await tools.git.pullFastForward(buildBranch);
+
+    // A plain fast-forward may have left nothing to reorder: the real-world
+    // "local build/{ref} merely trails origin" case (a checked-out branch
+    // always exists, so branchExists above can't distinguish it from the
+    // genuinely-diverted case — spec 10's branchMismatch guard forces the
+    // caller onto build/{ref}). If the pull already caught the branch up to
+    // the merged content, report the non-destructive `pulled` outcome rather
+    // than sending a zero-commit branch into `rebase` (whose commit-count
+    // precondition would fail with a misleading `unexpected-commit-count`).
+    if ((await tools.git.headSha(buildBranch)) === (await tools.git.headSha(ontoRef))) {
+      return {
+        success: true,
+        action: "pulled",
+        messages: [
+          `Current branch \`${currentBranch}\` - ref: ${ref}`,
+          `Pulled \`${buildBranch}\` to match \`${ontoRef}\` (merged Build Gate PR)`,
+        ],
+      };
+    }
+
+    const outcome = await tools.git.rebase(buildBranch, ontoRef);
+
+    if (outcome.status === "ok") {
+      await tools.git.push(buildBranch, { force: true });
+      return {
+        success: true,
+        action: "pulled-and-rebased",
+        rebaseOutcome: outcome,
+        messages: [
+          `Current branch \`${currentBranch}\` - ref: ${ref}`,
+          `Pulled \`${buildBranch}\` and rebased its build commit onto \`${ontoRef}\`, force-pushed`,
+        ],
+      };
+    }
+
+    if (outcome.status === "conflict") {
+      // The conflict is surfaced, never auto-resolved: the newly-merged
+      // test content takes precedence and the agent must adjust their
+      // build WIP to match it. No force-push of a conflicted rewrite.
+      return {
+        success: false,
+        action: "pulled-and-rebased",
+        rebaseOutcome: outcome,
+        messages: [
+          `Current branch \`${currentBranch}\` - ref: ${ref}`,
+          `Rebase of \`${buildBranch}\` onto \`${ontoRef}\` hit a conflict`,
+          `${outcome.details}`,
+          `The newly-merged test content takes precedence - adjust your build WIP to match it`,
+        ],
+      };
+    }
+
+    // unexpected-commit-count: the pull half completed; only the rebase
+    // half failed, surfaced via rebaseOutcome — not a reversion to
+    // "pulled" or "none" (§3.5's explicit Then clause).
+    return {
+      success: false,
+      action: "pulled-and-rebased",
+      rebaseOutcome: outcome,
+      messages: [
+        `Current branch \`${currentBranch}\` - ref: ${ref}`,
+        `Cannot rebase \`${buildBranch}\` onto \`${ontoRef}\`: it has ${outcome.actual} commits of its own, expected ${outcome.expected}`,
+        `Please squash \`${buildBranch}\` to a single commit before promoting`,
+      ],
     };
   }
 

@@ -292,10 +292,22 @@ export class RealGitTool implements GitTool {
    * separately if they want to switch to it).
    * If it does exist: first verify `git merge-base --is-ancestor
    * <branch> origin/<branch>` — a genuine fast-forward must actually be
-   * possible — then `git branch -f <branch> origin/<branch>`. The
+   * possible — then fast-forward the local ref to `origin/<branch>`. The
    * verification matters: blindly forcing the ref without checking
    * direction would silently discard a local-only commit if this were
-   * ever called on a branch that had diverged. */
+   * ever called on a branch that had diverged.
+   *
+   * How the ref is moved depends on whether `branch` is checked out:
+   * `git branch -f <branch> <originRef>` refuses (`fatal: Cannot force
+   * update the current branch.`) when `<branch>` is the currently
+   * checked-out branch — which is exactly the situation `promote`'s
+   * `merged-pending-pull` resolution is always in, since its own
+   * `branchMismatch` guard forces the caller onto `build/{ref}` before
+   * calling this (spec 10/14). So when `branch === currentBranch`, the
+   * fast-forward is done in place with `git merge --ff-only <originRef>`
+   * instead — which moves the checked-out branch forward only if the
+   * update genuinely is a fast-forward and errors (cleanly, on a real
+   * divergence) otherwise. */
   async pullFastForward(branch: string): Promise<void> {
     const originRef = `origin/${branch}`;
     if (!(await this.branchExists(branch))) {
@@ -331,6 +343,15 @@ export class RealGitTool implements GitTool {
           : `git merge-base --is-ancestor ${branch} ${originRef} failed (exit code ${err.code ?? "unknown"})`,
         { cause: error },
       );
+    }
+    if ((await this.currentBranch()) === branch) {
+      // `git branch -f` cannot force-update the currently checked-out
+      // branch, so fast-forward in place instead. `git merge --ff-only`
+      // moves the checked-out branch head to `origin/<branch>` only when
+      // that update really is a fast-forward (already verified above) and
+      // leaves it untouched on any genuine divergence.
+      await this.git.raw(["merge", "--ff-only", originRef]);
+      return;
     }
     await this.git.raw(["branch", "-f", branch, originRef]);
   }
