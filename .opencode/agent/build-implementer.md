@@ -56,10 +56,12 @@ permission:
     "git rev-list*": allow
     "git reflog*": allow
     "git ls-tree*": allow
+    "git symbolic-ref*": allow
     "git worktree*": allow
     "git rm*": allow
     "git for-each-ref*": allow
     "git -C*": allow
+    "git --version*": allow
     "gh pr create*": allow
     "gh pr list*": allow
     "gh pr view*": allow
@@ -107,6 +109,8 @@ permission:
     "rg *": allow
     "awk *": allow
     "wc *": allow
+    "sort *": allow
+    "mktemp *": allow
     "tr *": allow
     "cat *": allow
     "diff *": allow
@@ -115,9 +119,13 @@ permission:
     "find *": allow
     "xargs *": allow
     "true *": allow
+    "test *": allow
+    "set *": allow
     "date *": allow
     "sleep *": allow
     "base64 *": allow
+    "xxd *": allow
+    "which *": allow
     "ls *": allow
     "mkdir *": allow
     "cd *": allow
