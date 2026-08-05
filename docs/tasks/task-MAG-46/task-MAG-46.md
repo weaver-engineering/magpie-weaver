@@ -489,6 +489,18 @@ landed via the quick route and merged ([PR #107](https://github.com/weaver-engin
 before this spec-phase commit was created, so `spec/MAG-46` (and
 whatever forks from it) never sees the contradicted test.
 
+**Test phase done** — merged via
+[PR #109](https://github.com/weaver-engineering/magpie-weaver/pull/109)
+(`test/MAG-46` → `build/MAG-46`, rebase-merged, confirmed 2 commits).
+Architect review found no defects — independently reproduced `build-gate`
+locally (100% new-line coverage, 3 new tests fail-then-pass, 105
+pre-existing pass unmodified) rather than trusting CI's summary line.
+One thing worth flagging for the build phase, not a defect in the tests:
+§3.3 requires `derivePhase()` to genuinely resolve `build/{ref}` via
+branch-exists for the first time (currently throws `"not implemented"`
+for that case) — confirmed real spec-required scope by re-reading spec
+12 §3.3 directly, not a test-writer overreach. Build phase started (session `ses_02e533a15ffevGOv2z3oj8ixhz`, `agent_1`).
+
 ## Previous scope: spec 11 (done)
 
 **Merged via [PR #95](https://github.com/weaver-engineering/magpie-weaver/pull/95)**
