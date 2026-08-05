@@ -916,6 +916,68 @@ being allowed and no more capable of anything beyond displaying local ref
 history. Added `"git reflog*"` to all three agents, alongside `git
 log*`.
 
+## 3ax. `"sort*"` was missing entirely
+
+`test-writer`, starting MAG-46 spec 13, ran `find test/packages/task-phases
+-name "*.test.ts" | sort` while surveying existing test files — a
+read-only, informational command with no entry at all, despite
+`find*`/`wc*`/other text-processing utilities already being allowed and
+`sort` no more capable of anything beyond ordering lines. Added
+`"sort *"` to all three agents, alongside `wc *`.
+
+## 3ay. `"mktemp*"` was missing entirely
+
+`test-writer`, writing spec 13's real `--dev-testing git rebase`
+fixtures, ran `mktemp -d ...` to create a throwaway repo for a smoke
+test — expected to recur heavily for this chunk specifically, since
+every rebase scenario needs its own disposable real git repo. No entry
+at all despite being a standard, safe temp-file/dir primitive with no
+mutation risk beyond the throwaway path it creates. Added `"mktemp *"`
+to all three agents, alongside `sort *`.
+
+## 3az. `"test*"` was missing entirely
+
+`test-writer`, building spec 13's real build-reorder fixture (the
+trickiest of the three rebase scenarios), used `test "$(git rev-parse
+...)" = "$(git rev-parse ...)"` to assert two commits' SHAs matched
+after a manual rebase — the POSIX comparison command/builtin, zero
+mutation capability, same class of safety as `true` (already allowed).
+Added `"test *"` to all three agents, alongside `true *`.
+
+## 3ba. `"set*"` was missing entirely
+
+`build-implementer`, starting spec 13's build phase, ran a `set -e`
+scratch-repo verification script (the shell builtin toggling exit-on-
+error mode, no filesystem/network effect at all) before implementing
+`rebase()`/`mergeBase()` for real. No entry at all, same safety class
+as `true`/`test`. Added `"set *"` to all three agents.
+
+## 3bb. `"git symbolic-ref*"` was missing entirely
+
+`build-implementer`, diagnosing an unexpected two-`init`-commit fixture
+result while implementing `rebase()`, ran `git symbolic-ref HEAD` to
+check the current default-branch-naming behavior on this machine — a
+read-only plumbing command, same class of safety as `git rev-parse`/
+`git merge-base` (both already allowed). Added `"git symbolic-ref*"`
+to all three agents, alongside `git ls-tree*`.
+
+## 3bc. `"xxd*"` was missing entirely
+
+`build-implementer`, tracking down a real environment-specific fixture
+discrepancy while implementing `rebase()`, ran `git branch --list | xxd`
+to inspect raw output bytes — a read-only hex-dump utility, same safety
+class as `cat`/`head`/`tail`. Added `"xxd *"` to all three agents,
+alongside `base64 *`.
+
+## 3bd. `"git --version*"` and `"which*"` were both missing entirely
+
+`build-implementer`, checking whether a real environment-specific
+fixture discrepancy was git-version-dependent, ran `git --version` and
+`which -a git` to identify exactly which git binary and version this
+machine resolves — both trivial, read-only diagnostics with zero
+mutation capability, same class as `gh --version*` (already allowed).
+Added `"git --version*"` and `"which *"` to all three agents.
+
 ## 5. Acceptance criteria
 
 - Three sub-agent config files exist under `.opencode/agent/`, each with

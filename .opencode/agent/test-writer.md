@@ -45,6 +45,7 @@ permission:
     "git push*": allow
     "git ls-files*": allow
     "git ls-remote*": allow
+    "git --version*": allow
     "git clone*": allow
     "git show*": allow
     "git stash*": allow
@@ -52,6 +53,7 @@ permission:
     "git rev-list*": allow
     "git reflog*": allow
     "git ls-tree*": allow
+    "git symbolic-ref*": allow
     "git worktree*": allow
     "git rm*": allow
     "gh pr create*": allow
@@ -98,6 +100,8 @@ permission:
     "rg *": allow
     "awk *": allow
     "wc *": allow
+    "sort *": allow
+    "mktemp *": allow
     "tr *": allow
     "cat *": allow
     "diff *": allow
@@ -106,9 +110,13 @@ permission:
     "find *": allow
     "xargs *": allow
     "true *": allow
+    "test *": allow
+    "set *": allow
     "date *": allow
     "sleep *": allow
     "base64 *": allow
+    "xxd *": allow
+    "which *": allow
     "ls *": allow
     "mkdir *": allow
 ---
