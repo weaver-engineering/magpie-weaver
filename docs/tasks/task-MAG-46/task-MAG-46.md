@@ -457,6 +457,38 @@ Closed via [magpieweaver-docs PR #89](https://github.com/weaver-engineering/magp
 "note for whoever picks this up," which no longer needs to exist as an
 open question).
 
+Also produced [magpieweaver-docs PR #90](https://github.com/weaver-engineering/magpieweaver-docs/pull/90):
+this whole review generalised into `design-workflow-findings.md` Finding
+3 ("prior-behavior retirements are formulaic, not a spec defect"), the
+reasoning added to `sequenced-spec-supervision-notes.md`, the four-step
+retirement recipe added to `sequenced-spec-supervision-CLAUDE.md` as a
+named procedure, and a consequence for `loom-service-vision.md` — the
+future scheduler needs the same required-behavior-vs-merged-test diff as
+a standing check, not just something the architect currently does by
+hand.
+
+## Current Scope: spec 12
+
+**Working spec doc:**
+`task-MAG-46-12-status-merged-pending-pull-spec.md` (copied alongside
+this file). Extends `lib/repo-state.ts`'s `deriveRepoState()` (same
+shared pipeline as MAG-46-11/11.01's `awaiting-pr`) with the Build Gate
+pair's merged-PR case: a confirmed-merged `test/{ref}` → `build/{ref}`
+PR whose `headRefOid` matches `test/{ref}`'s current HEAD derives
+`phase: "build", state: "merged-pending-pull"`, in both sub-cases (no
+local `build/{ref}` yet, or local `build/{ref}` behind `origin`). No git
+mutation — resolving this state is `promote`-only (MAG-46-14). The
+superseded-merge distinction (`headRefOid` no longer matching) is
+explicitly out of scope, deferred to MAG-46-13/14.
+
+**Pre-handoff spec review:** already done in full as part of the
+specs 12–15 batch sequencing review above — shim-dependency check
+clean, test-file-layout header matches. The one action item it produced
+for this chunk, retiring `defers-when-gate-pr-exists.test.ts` §3.1, was
+landed via the quick route and merged ([PR #107](https://github.com/weaver-engineering/magpie-weaver/pull/107))
+before this spec-phase commit was created, so `spec/MAG-46` (and
+whatever forks from it) never sees the contradicted test.
+
 ## Previous scope: spec 11 (done)
 
 **Merged via [PR #95](https://github.com/weaver-engineering/magpie-weaver/pull/95)**
