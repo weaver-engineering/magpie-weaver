@@ -467,7 +467,33 @@ future scheduler needs the same required-behavior-vs-merged-test diff as
 a standing check, not just something the architect currently does by
 hand.
 
-## Current Scope: spec 12
+## Current Scope: spec 13
+
+**Working spec doc:**
+`task-MAG-46-13-dev-testing-git-rebase-forward-spec.md` (copied alongside
+this file). The dedicated dev-testing chunk (tier 1, per Finding 1's
+three-tier framework) making `GitTool.rebase()`/`mergeBase()` real —
+`promote`'s spec/quick rebase-forward path has called `rebase()` since
+spec 10.01, confirmed broken via e2e testing after that chunk's merge,
+left as known debt in its existing backlog position until now. Covers
+all three real scenarios from LLD §3.5 (spec-amended-under-test,
+main-drift, build-reorder-after-superseded-merge), the commit-count
+precondition (checked before any rewrite; branch left untouched on
+failure), and conflict reporting (surfaced, never auto-resolved).
+Exercised for real via `pnpm task --dev-testing git <method> -i`, not
+mocked — this is the single riskiest primitive in the whole design, a
+force-push-adjacent rewrite that must be proven against real git
+behavior before `promote` is allowed to call it unattended.
+
+**Pre-handoff spec review:** already done in full as part of the
+specs 12–15 batch sequencing review. No shim-dependency check needed —
+this chunk *is* the stub-resolution point by design, not a dependent of
+one. Existing-test contradiction check clean: every `mergeBase`/`rebase`
+reference elsewhere in the test suite is an `unexpected()` throw-mock
+asserting they're never called on *other* code paths, which stays true
+regardless of whether the real implementation exists underneath.
+
+## Previous scope: spec 12 (done)
 
 **Working spec doc:**
 `task-MAG-46-12-status-merged-pending-pull-spec.md` (copied alongside
