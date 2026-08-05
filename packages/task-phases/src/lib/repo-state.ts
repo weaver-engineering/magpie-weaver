@@ -42,10 +42,12 @@ async function anyPhaseBranchExists(
 /** The §3.2 merge-status/open-PR stage, run *before* the branch-exists
  * derivation. Returns a `TaskStatus` for the PR-driven state this chunk
  * owns, or `null` when no owned PR drives the state (so branch-exists
- * derivation applies). Merged PRs on any gate pair, and the regular route's
- * open Main Gate PR, still defer ("not implemented") — those states
- * (`merged-pending-pull`, `merged-pending-cleanup`, and the regular
- * route's Main-Gate `awaiting-pr`) are owned by later chunks (MAG-46-12/15).
+ * derivation applies). The merged Build Gate PR (`build/{ref}` <-
+ * `test/{ref}`) derives `merged-pending-pull` for the ordinary merge
+ * (spec 12 §3.1/§3.2); the merged Main Gate pairs (`main`/`build/{ref}`,
+ * `main`/`task/{ref}`) and the regular route's open Main Gate PR still
+ * defer ("not implemented") — those states (`merged-pending-cleanup` and
+ * the regular route's Main-Gate `awaiting-pr`) are owned by MAG-46-15.
  * The open Build Gate PR (`test/{ref}` -> `build/{ref}`) derives `awaiting-pr`
  * attached to the **source** phase `test` (spec 11 §3.2/§3.4); the open quick
  * route's Main Gate PR (`main`/`task/{ref}`) derives `awaiting-pr` attached to
@@ -58,8 +60,67 @@ async function derivePrState(
   for (const [base, head] of GATE_PR_PAIRS) {
     const baseName = base.replace("{ref}", ref);
     const headName = head.replace("{ref}", ref);
-    // A merged PR is unconditional deferral on every pair (§3.1/§3.3).
-    if ((await tools.github.findMergedPR(baseName, headName)) !== null) {
+    const merged = await tools.github.findMergedPR(baseName, headName);
+    if (merged !== null) {
+      // The merged Build Gate PR is this chunk's derivation — but only for
+      // the ordinary merge: `test/{ref}`'s current HEAD is compared against
+      // the merged PR's recorded `headRefOid` (§2.1), and a mismatch is the
+      // superseded-merge case, still deferred (MAG-46-13/14's concern).
+      //
+      // `test/{ref}` is read via the remote-tracking ref (`origin/test/{ref}`),
+      // not the bare local name: `fetch()` only ever updates the former and
+      // never checks a local `test/{ref}` out, so the local branch can
+      // legitimately not exist (a fresh clone, a CI runner, an architect
+      // worktree that never branched every phase). It is read-only input to
+      // the headRefOid comparison — unlike §3.2's local-vs-origin comparison
+      // for `build/{ref}`, whose whole point is comparing local state.
+      if (base === "build/{ref}" && head === "test/{ref}") {
+        if ((await tools.git.headSha(`origin/${headName}`)) === merged.headRefOid) {
+          const canonicalBranch = baseName;
+          // Both sub-cases report `merged-pending-pull`: no local
+          // `build/{ref}` yet (§3.1), or local `build/{ref}` behind
+          // `origin/build/{ref}` (§3.2). Never resolves the state — no
+          // pullFastForward/rebase/checkout here (resolving is
+          // promote-only, MAG-46-14).
+          if (!(await tools.git.branchExists(canonicalBranch, { remote: false }))) {
+            return {
+              ref,
+              phase: "build",
+              canonicalBranch,
+              currentBranch,
+              branchMismatch: currentBranch !== canonicalBranch,
+              state: "merged-pending-pull",
+            };
+          }
+          if (
+            (await tools.git.headSha(canonicalBranch)) !==
+            (await tools.git.headSha(`origin/${canonicalBranch}`))
+          ) {
+            return {
+              ref,
+              phase: "build",
+              canonicalBranch,
+              currentBranch,
+              branchMismatch: currentBranch !== canonicalBranch,
+              state: "merged-pending-pull",
+            };
+          }
+          // §3.3: local `build/{ref}` already caught up with origin — the
+          // merged PR no longer drives the state; fall through to MAG-46-06's
+          // ordinary state derivation applied to the build phase.
+          const state = await deriveState(tools, "build", ref, canonicalBranch);
+          return {
+            ref,
+            phase: "build",
+            canonicalBranch,
+            currentBranch,
+            branchMismatch: currentBranch !== canonicalBranch,
+            state,
+          };
+        }
+      }
+      // A merged PR on the Main Gate pairs, or the superseded-merge Build
+      // Gate case, is an unconditional deferral.
       throw new Error("not implemented");
     }
     const open = await tools.github.findOpenPR(baseName, headName);
