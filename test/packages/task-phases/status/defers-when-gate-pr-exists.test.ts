@@ -35,6 +35,18 @@
  * only touches the open `main`/`task/{ref}` pair), still correctly deferred,
  * still owned by MAG-46-12/15.
  *
+ * **Correction (MAG-46, quick-route architect fix, ahead of MAG-46-12):**
+ * the former §3.1 case — "defers when the Build Gate PR is merged" — is
+ * retired for the identical reason §3.2/§3.4 were: MAG-46-12 derives real
+ * `phase: "build", state: "merged-pending-pull"` for a merged
+ * `build/{ref}`/`test/{ref}` PR instead of deferring, directly
+ * contradicting what this file asserted. Retested for real in
+ * `status/merged-pending-pull.test.ts` (MAG-46-12's own test file, per
+ * its test-file-layout note) — not rewritten in place here, for the same
+ * reason as §3.2/§3.4's retirement. §3.3 remains untouched: the
+ * `main`/`build/{ref}` merged pair is outside MAG-46-12's scope, still
+ * correctly deferred, still owned by MAG-46-15.
+ *
  * Same in-process pattern as specs 04/06: `run(argv, tools)` is called
  * directly with an injected `ExternalTools` whose `git`/`github` members
  * are test doubles — no real git/gh/fs calls anywhere. Unlike spec 06,
@@ -52,9 +64,10 @@
  */
 
 // Implements: task-MAG-46-06-01-status-defers-when-gate-pr-exists-spec.md
-// System behaviors: 1.5.6, 1.5.8 (1.5.7, 1.5.9 retired — see correction
-// notes above; retested for real in status/awaiting-pr.test.ts, MAG-46-11
-// and MAG-46-11.01 respectively)
+// System behaviors: 1.5.8 (1.5.6, 1.5.7, 1.5.9 retired — see correction
+// notes above; retested for real in status/merged-pending-pull.test.ts
+// (MAG-46-12) and status/awaiting-pr.test.ts (MAG-46-11/11.01)
+// respectively)
 
 import { afterEach, describe, expect, it, vi, type Mock } from "vitest";
 import { run } from "../../../../packages/task-phases/src/cli.js";
@@ -211,34 +224,6 @@ afterEach(() => {
 });
 
 describe("status: defers when a gate PR exists", () => {
-  it("defers when the Build Gate PR is merged, without deriving from branches (§3.1)", async () => {
-    const { tools, mocks } = buildTools({
-      branchExists: existsOnly("test/AAA-101"),
-      findMergedPR: prOnlyFor(["build/AAA-101", "test/AAA-101"], mergedPR()),
-    });
-    const cap = captureStdout();
-    const code = await run(["node", "cli.js", "status", "--ref", "AAA-101"], tools);
-    const stdout = cap.stdout();
-    cap.restore();
-
-    // The deferral is the same "not implemented" placeholder every
-    // not-yet-built path in this command already uses.
-    expect(code).toBe(1);
-    expect(stdout).toContain("not implemented");
-
-    // fetch runs unconditionally first (§1.1).
-    expect(mocks.fetch).toHaveBeenCalledTimes(1);
-
-    // The Build Gate pair (test/{ref} -> build/{ref}) was consulted and
-    // its merged PR triggered the deferral.
-    expect(mocks.findMergedPR).toHaveBeenCalledWith("build/AAA-101", "test/AAA-101");
-
-    // The branch-exists derivation (MAG-46-06) genuinely wasn't reached
-    // (§2.1) — not merely that the right message came out.
-    expect(mocks.hasCommitsBeyond).not.toHaveBeenCalled();
-    expect(mocks.headCommitTitle).not.toHaveBeenCalled();
-  });
-
   it("defers when the Main Gate PR (normal route) is merged, without deriving from branches (§3.3)", async () => {
     const { tools, mocks } = buildTools({
       branchExists: existsOnly("build/AAA-103"),
