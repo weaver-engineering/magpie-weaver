@@ -9,9 +9,9 @@
  * `deleteBranch`. Spec 07 implements `changedFiles`. `isAncestor` landed
  * early (real, in `packages/task-phases/src/deps/git.ts`) to unblock the
  * spec 10 `promote` success path, which re-derives the post-fork status via
- * `deriveRepoState()` and reaches it. The remaining methods (`mergeBase`,
- * `rebase`) still throw — real implementations land with the chunk that
- * owns them (MAG-46-13).
+ * `deriveRepoState()` and reaches it. Spec 13 implements the final two
+ * stubs — `mergeBase` and `rebase` (the force-push-adjacent primitive
+ * every §3.5 rebase-forward case depends on).
  */
 
 import { execFile } from "node:child_process";
@@ -79,7 +79,20 @@ export interface GitTool {
 
   pullFastForward(branch: string): Promise<void>;
 
-  /** Reports rather than resolves a conflict — newly-merged, human-reviewed
+  /** Rebases `branch` onto `ontoRef` in place (no push) — the shared
+   * primitive behind every §3.5 rebase-forward case (spec-amended-under-
+   * test, build-reorder, main-drift). Derives `upstream` as
+   * `mergeBase(branch, ontoRef)` — the boundary between the branch's own
+   * commits and what it shares with its target — then verifies the
+   * commit-count precondition (`rev-list --count upstream..branch == 1`)
+   * *before* any rewrite is attempted, refusing with
+   * `unexpected-commit-count` otherwise (the branch is left completely
+   * untouched). If exactly 1, runs `git rebase --onto <ontoRef>
+   * <upstream> <branch>` and reports `conflict` or `ok`. The `<branch>`
+   * argument checks the branch out as part of the operation (§2.1 —
+   * callers restore the starting branch themselves). Reports rather than
+   * resolves a conflict, leaving the repository mid-rebase for a
+   * human/agent to resolve manually — newly-merged, human-reviewed
    * content always takes precedence over the branch being rebased. */
   rebase(branch: string, ontoRef: string): Promise<RebaseOutcome>;
 
@@ -133,8 +146,11 @@ export class RealGitTool implements GitTool {
     return (await this.git.raw(["rev-parse", branch])).trim();
   }
 
-  mergeBase(_refA: string, _refB: string): Promise<string> {
-    throw new Error("not implemented");
+  /** `git merge-base <refA> <refB>` — the nearest common ancestor SHA of
+   * two refs. `rebase()`'s upstream-boundary derivation (§4.8) is built on
+   * this, so it shares the same execFile-for-git pattern. */
+  async mergeBase(refA: string, refB: string): Promise<string> {
+    return (await this.git.raw(["merge-base", refA, refB])).trim();
   }
 
   /** `git rev-list --count <parentBranch>..<branch>` — commits unique to
@@ -319,8 +335,78 @@ export class RealGitTool implements GitTool {
     await this.git.raw(["branch", "-f", branch, originRef]);
   }
 
-  rebase(_branch: string, _ontoRef: string): Promise<RebaseOutcome> {
-    throw new Error("not implemented");
+  /** Rebases `branch` onto `ontoRef` in place (no push) — the shared
+   * primitive behind every §3.5 rebase-forward case (spec-amended-under-
+   * test, build-reorder, main-drift). `upstream` is derived as
+   * `mergeBase(branch, ontoRef)`, then the commit-count precondition
+   * (`rev-list --count upstream..branch == 1`) is verified *before* any
+   * rewrite is attempted — a branch with zero or more than one commit of
+   * its own is refused cleanly with `unexpected-commit-count`, left
+   * completely untouched. If exactly 1, runs `git rebase --onto <ontoRef>
+   * <upstream> <branch>`. execFile (not simple-git) so the exit code and
+   * git's own stdout/stderr can be read: a content conflict exits 1 and
+   * must be reported as its own outcome (leaving the repository
+   * mid-rebase, never auto-aborted), while anything else (an unknown ref,
+   * a dirty worktree) is a genuine error to surface. */
+  async rebase(branch: string, ontoRef: string): Promise<RebaseOutcome> {
+    const upstream = await this.mergeBase(branch, ontoRef);
+
+    const count = Number(
+      (await this.git.raw(["rev-list", "--count", `${upstream}..${branch}`])).trim(),
+    );
+    if (count !== 1) {
+      return {
+        status: "unexpected-commit-count",
+        expected: 1,
+        actual: count,
+        details: `Expected exactly 1 commit unique to ${branch} relative to ${upstream}, found ${count}`,
+      };
+    }
+
+    try {
+      await execFileAsync(
+        "git",
+        ["rebase", "--onto", ontoRef, upstream, branch],
+        { cwd: this.cwd, encoding: "utf-8" },
+      );
+      return { status: "ok" };
+    } catch (error) {
+      const err = error as { code?: number; stdout?: string | Buffer; stderr?: string | Buffer };
+      const stdout = (err.stdout ?? "").toString();
+      const stderr = (err.stderr ?? "").toString();
+
+      // Distinguish a genuine content conflict (git rebase exit 1, CONFLICT
+      // lines on stdout, unmerged paths left in the worktree) from any other
+      // failure (exit 128, fatal on stderr). The unmerged-path check via
+      // `git diff --name-only --diff-filter=U` is the decisive signal — a
+      // conflicted rebase always leaves at least one path unmerged.
+      let unmerged: string;
+      try {
+        unmerged = (await this.git.raw(["diff", "--name-only", "--diff-filter=U"])).trim();
+      } catch {
+        unmerged = "";
+      }
+      if (err.code === 1 || unmerged.length > 0 || /CONFLICT/i.test(stdout)) {
+        return {
+          status: "conflict",
+          details: [
+            stdout.trim(),
+            stderr.trim(),
+            ...(unmerged.length > 0 ? [`Unmerged paths:\n${unmerged}`] : []),
+          ]
+            .filter((line) => line.length > 0)
+            .join("\n"),
+        };
+      }
+
+      const stderrText = stderr.trim();
+      throw new Error(
+        stderrText.length > 0
+          ? stderrText
+          : `git rebase --onto ${ontoRef} ${upstream} ${branch} failed (exit code ${err.code ?? "unknown"})`,
+        { cause: error },
+      );
+    }
   }
 
   /** `git branch -D <branch>` + `git push origin --delete <branch>` —
