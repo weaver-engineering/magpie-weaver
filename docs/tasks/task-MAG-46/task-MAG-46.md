@@ -493,6 +493,30 @@ reference elsewhere in the test suite is an `unexpected()` throw-mock
 asserting they're never called on *other* code paths, which stays true
 regardless of whether the real implementation exists underneath.
 
+**Test phase done** — merged via
+[PR #116](https://github.com/weaver-engineering/magpie-weaver/pull/116)
+(`test/MAG-46` → `build/MAG-46`, rebase-merged, confirmed 2 commits).
+Architect review found no defects — independently rebuilt and ran the
+new real-git dev-testing file directly (6/7 fail-then-pass as required,
+the 7th — malformed-JSON rejection — legitimately passes immediately,
+pre-existing CLI arg-parsing logic unrelated to `rebase()`, same class
+as spec 12's `§3.2`), full suite (109 pre-existing pass unmodified),
+`build-gate` reproduced locally matching CI exactly. Every scenario uses
+real git subprocesses against real throwaway repos, asserting on actual
+repo state afterward, not mocks — the §3.3 build-reorder fixture
+notably simulates GitHub's own rebase-merge via a throwaway
+`cherry-pick` branch to produce a genuine superseded-merge scenario
+rather than needing real GitHub interaction. Build phase started
+(session `ses_02dad41f4ffef6CGpKFLlkO0wU`, `agent_1`).
+
+Three more agent permission gaps surfaced during this test phase (on top
+of the earlier stuck-turn stall requiring a manual cancel via the user's
+local client — no error ever logged for that one, worse than the usual
+free-tier 503 pattern): `sort`, `mktemp`, and `test` (the POSIX
+comparison command) were all missing entirely, needed for the real
+git-fixture construction this chunk's tests require. Fixed via
+`task/MAG-40` ([PR #115](https://github.com/weaver-engineering/magpie-weaver/pull/115)).
+
 ## Previous scope: spec 12 (done)
 
 **Working spec doc:**
