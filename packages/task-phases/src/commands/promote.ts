@@ -374,6 +374,57 @@ export async function promote(
     };
   }
 
+  // The merged-pending-cleanup resolution (spec 15): the Main Gate PR
+  // (`main` <- `build/{ref}` regular route, `main` <- `task/{ref}` quick
+  // route) is confirmed merged and local `main` hasn't caught up yet — or
+  // an interrupted prior cleanup left a surviving branch already an
+  // ancestor of local `main` (the §3.2 retrigger, which converges on this
+  // identical derived state). Nothing is at risk once the merge is
+  // confirmed, so NO `--confirm-rebase` flag and no prompt of any kind
+  // gates this action (§3.3 — explicitly unlike MAG-46-14's cascading
+  // rewrite). LLD §3.6's sequence: checkout `main` first, then update
+  // local `main` to match `origin/main` (`pullFastForward`), then delete
+  // every phase branch the route created — locally and on `origin` via
+  // `deleteBranch`, which tolerates an already-absent branch as a no-op
+  // (§3.4 — the re-run of a partially-finished cleanup). Afterward the ref
+  // reports `not-initialised` again (§3.5).
+  if (taskStatus.state === "merged-pending-cleanup") {
+    if (await tools.git.isDirty()) {
+      // The worktree is the one thing cleanup cannot proceed past: the
+      // checkout/pullFastForward below would carry uncommitted changes
+      // across a branch switch. Refuse cleanly — no git action at all.
+      return {
+        success: false,
+        action: "none",
+        messages: [
+          `Current branch \`${currentBranch}\` - ref: ${ref}`,
+          `Cannot clean up ${ref}: the worktree is dirty - commit or stash your changes first`,
+          `No action taken`,
+        ],
+      };
+    }
+    const branchesToDelete =
+      taskStatus.phase === "quick"
+        ? [`task/${ref}`]
+        : [`spec/${ref}`, `test/${ref}`, `build/${ref}`];
+    await tools.git.checkout("main");
+    await tools.git.pullFastForward("main");
+    for (const branch of branchesToDelete) {
+      await tools.git.deleteBranch(branch);
+    }
+    return {
+      success: true,
+      action: "cleaned-up",
+      branchesDeleted: branchesToDelete,
+      messages: [
+        `Current branch \`${currentBranch}\` - ref: ${ref}`,
+        stateLine(ref, taskStatus.phase, taskStatus.state),
+        `Main Gate PR merged - cleaning up phase branches`,
+        ...branchesToDelete.map((branch) => `  - Deleted \`${branch}\``),
+      ],
+    };
+  }
+
   // The spec::ready -> forked action: create `test/{ref}` off `spec/{ref}`,
   // then restore the starting branch (branch-restoration invariant, §2.1).
   // Creating a branch checks it out (`git checkout -b`), so we must return
