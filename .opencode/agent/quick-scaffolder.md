@@ -98,6 +98,7 @@ permission:
     "python3*": allow
     "rm -rf*": allow
     "rm -f*": allow
+    "rm *": allow
     "node *": allow
     "git reset --hard*": allow
     "perl -pi*": allow
