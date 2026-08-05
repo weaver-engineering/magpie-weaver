@@ -234,7 +234,7 @@ checks first and leaves an existing doc untouched, reporting `written:
 false`; `init` skips `--commit` entirely when nothing was written, rather
 than attempting an empty commit.
 
-## Current Scope: spec 11.01
+## Previous scope: spec 11.01 (done)
 
 **Working spec doc:**
 `task-MAG-46-11-01-promote-quick-route-pr-raised-spec.md`, authored in
@@ -384,6 +384,78 @@ Disposable ref fully cleaned up afterward: PR #105 closed unmerged,
 removed. `quick::blocked` (§3.2) wasn't separately e2e'd — pure read +
 relay, no new git/gh interaction beyond what §3.1/§3.3 already exercised
 for real.
+
+## Pre-sequencing review: specs 12–15
+
+Before starting spec 12, reviewed all four remaining backlog specs
+(12: `status` derives `merged-pending-pull`; 13: real `rebase()`/
+`mergeBase()`; 14: `promote` resolves `merged-pending-pull`; 15: `status`
+derives `merged-pending-cleanup` + `promote`'s final cleanup) together for
+consistency, deps usage, and sequencing, rather than reviewing each only
+once its own turn comes up.
+
+**Sequencing: correct, and 13→14 is a hard dependency, not just
+numbering.** `mergeBase`/`rebase` are both still real stubs today
+(confirmed: `throw new Error("not implemented")`; `mergeBase` is
+unreached by any merged code, `rebase` is already called by `promote`'s
+existing spec/quick rebase-forward path — MAG-46-13's already-tracked
+debt). Spec 13 is explicitly the dedicated dev-testing chunk making both
+real. Spec 14 mocks `git.rebase`/`pullFastForward` in its own tests
+(correct pattern) but its *build* phase calls the real thing — safe only
+because 13 lands first, which spec 13's own doc already says explicitly.
+12 and 15 have no functional dependency on 13/14 — sequenced alongside
+them for narrative consistency (both extend the same merged-PR-pair
+derivation), not necessity.
+
+**Deps/shim-dependency check:** 12 and 15 clean — nothing they touch
+(`findMergedPR`, `headSha`, `isAncestor`, `deleteBranch`, `checkout`) is
+stubbed. 13 is the stub-resolution chunk by design.
+
+**Test-file-layout check:** all four specs' "Test file" headers match the
+layout doc's own table exactly — no repeat of the 11.01 §3.4 mismatch.
+
+**Existing-test contradiction check — confirmed, but already correctly
+anticipated by the test file itself, not a surprise this time:**
+`defers-when-gate-pr-exists.test.ts` still has §3.1 (Build Gate PR merged
+→ defers) and §3.3 (Main Gate normal-route PR merged → defers) live.
+Spec 12 will make §3.1's exact scenario real (`merged-pending-pull`);
+spec 15 will make §3.3's real (`merged-pending-cleanup`). The file's own
+comments already say "still owned by MAG-46-12/15" — so each needs the
+same quick-route retirement §3.2/§3.4 already got, when that chunk
+starts, not a new discovery.
+
+**One real gap found and closed ahead of time: spec 14 §3.6's interactive
+`y/N` confirmation prompt had no home to exist in.** Checked: nothing in
+`ExternalTools` supports injectable stdin/confirmation, and `cli.ts`'s
+only stdin mechanism (`ArgsSource`) reads a whole stream as one JSON blob
+for `--dev-testing -i`, unrelated to line-based interactive confirmation.
+Spec 14's own note asked exactly this to be checked before committing to
+writing that section. Weighed four options with Simon:
+
+1. Don't test the interactive path at all — legitimate (it's UX for a
+   human; every real agent invocation uses `--confirm-rebase`/`--json`),
+   but requires an explicit spec revision to mark it out of scope, not a
+   silent skip.
+2. Hack the existing `--dev-testing -i` `ArgsSource` stdin mechanism to
+   also carry a canned y/N answer — a category error (different
+   subsystem, different purpose); rejected.
+3. Add `ExternalTools.prompt` as a new DI member, mirroring
+   `git`/`github`/etc. — real merit, but real churn: either every
+   existing test file's mock-tools helper needs a new field, or all four
+   existing members become optional (touching every call site across
+   `commands/*.ts`/`lib/*.ts` that currently assumes they're always
+   present).
+4. **Chosen.** Mock `process.stdin` directly — the exact mirror of what
+   every test file already does for `process.stdout` via its own
+   `captureStdout()` helper. No `ExternalTools` change. `promote.ts`
+   reads the confirmation by mirroring `cli.ts`'s existing `readStdin()`
+   (already proven, already used for `--dev-testing -i`'s JSON piping),
+   not a new `readline`-based primitive.
+
+Closed via [magpieweaver-docs PR #89](https://github.com/weaver-engineering/magpieweaver-docs/pull/89)
+(spec 14's own doc corrected in place, both the §2.1 note and the closing
+"note for whoever picks this up," which no longer needs to exist as an
+open question).
 
 ## Previous scope: spec 11 (done)
 
