@@ -1005,6 +1005,16 @@ modification time against `git log -1`'s commit time — confirming the
 live-patch (§3be) had actually landed. Read-only, same class as `ls`/
 `cat`/`head`. Added `"stat *"` to all three agents.
 
+## 3bg. A plain `"rm *"` (no flags) was missing entirely
+
+`test-writer`, assembling a test file from scratch parts at spec 15
+kickoff (`cat part1 part2 > dest`), needed to clean up the temp files
+afterward with a plain `rm /tmp/part1 /tmp/part2` — no flags. Only
+`"rm -rf*"` and `"rm -f*"` were allow-listed, both requiring a literal
+flag; an unforced, non-recursive `rm <file>` on scratch files matches
+neither. Strictly less capable than what's already unconditionally
+allowed (`rm -rf*`), so no new risk. Added `"rm *"` to all three agents.
+
 ## 5. Acceptance criteria
 
 - Three sub-agent config files exist under `.opencode/agent/`, each with
