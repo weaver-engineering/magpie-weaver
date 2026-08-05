@@ -501,6 +501,50 @@ branch-exists for the first time (currently throws `"not implemented"`
 for that case) — confirmed real spec-required scope by re-reading spec
 12 §3.3 directly, not a test-writer overreach. Build phase started (session `ses_02e533a15ffevGOv2z3oj8ixhz`, `agent_1`).
 
+**Build phase found a real bug via e2e testing that the mocked suite and CI both missed** — [PR #111](https://github.com/weaver-engineering/magpie-weaver/pull/111).
+`derivePrState`'s new code read `test/{ref}`'s HEAD via the bare local
+branch name (`tools.git.headSha("test/{ref}")`). Nothing guarantees that
+branch exists locally — `fetch()` only ever updates the remote-tracking
+ref. Found by running the real built CLI from a fresh clone against a
+genuinely merged PR on a disposable ref (`ZZZZ-972`, base/head branches
+created for real, PR raised, **Simon merged it** — `gh pr merge` is
+withheld from agents and architect alike, so this needed a real,
+if disposable, human-approved merge; the sandbox fixture repo didn't fit
+since its branches aren't named `build/{ref}`/`test/{ref}`): crashed with
+`fatal: ambiguous argument 'test/ZZZZ-972': unknown revision`. Confirmed
+the exact cause by manually branching `test/ZZZZ-972` locally — with that
+in place the same code succeeded.
+
+Relayed to `build-implementer`, which fixed the read to use
+`origin/test/{ref}` (matching the pattern already used elsewhere in this
+file for `build/{ref}` vs `origin/build/{ref}`), reproduced the original
+crash and confirmed the fix against real git state itself before
+reporting — genuinely thorough, went further than asked and also
+real-verified §3.2/§3.3. It then correctly hit a second-order
+consequence and stopped rather than working around it: the already-merged
+test's `headShaFor` mock was pinned to the same bare `test/{ref}` form the
+buggy implementation used, so the *correct* implementation now failed the
+*existing* mocked assertions. `test/**` is immutable to it; reported
+`needs-architect-intervention` with the exact lines needing correction
+rather than reaching for a bare-then-origin fallback that would satisfy
+the mock while silently masking real git errors — real engineering
+judgment, not just rule-following.
+
+**Architect fix:** amended the already-merged test commit directly
+(`git rebase -i`, edit in place, not a new commit — commit count stayed
+at exactly 3) to correct `merged-pending-pull.test.ts`'s `headShaFor`
+keys and `toHaveBeenCalledWith` assertions to `origin/test/{ref}`.
+Independently re-verified twice: mocked suite (108/108) and a second real
+e2e pass from a fresh clone (no local `test/ZZZZ-972`) confirming
+`build::merged-pending-pull` for real. One further trunk-drift rebase
+needed afterward (PR #110 landed after `build/MAG-46` forked, same class
+as before) — done, pushed, CI green. Disposable ref fully unwound
+(`build/ZZZZ-972`/`test/ZZZZ-972` deleted on origin).
+
+This is the third real bug e2e testing alone has caught in this backlog
+(`isAncestor`, `rebase()`, now this) — the mocked suite and CI were both
+fully green each time.
+
 ## Previous scope: spec 11 (done)
 
 **Merged via [PR #95](https://github.com/weaver-engineering/magpie-weaver/pull/95)**
