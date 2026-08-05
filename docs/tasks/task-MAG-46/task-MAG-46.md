@@ -467,7 +467,28 @@ future scheduler needs the same required-behavior-vs-merged-test diff as
 a standing check, not just something the architect currently does by
 hand.
 
-## Current Scope: spec 14
+## Current Scope: spec 15
+
+**Working spec doc:**
+`task-MAG-46-15-status-merged-pending-cleanup-and-promote-cleaned-up-spec.md`
+(copied alongside this file). The final state in the phase/state machine:
+`status` derives `merged-pending-cleanup` once the Main Gate PR is
+confirmed merged and local `main` hasn't caught up yet — including the
+interrupted-cleanup retrigger (a surviving phase branch already an
+ancestor of `main`), which must converge on the identical derived state,
+not a distinct broken/stale one. `promote`'s `cleaned-up` action resolves
+it: updates `main`, deletes every surviving phase branch (local and
+`origin`), no confirmation required (nothing is lost once the merge is
+confirmed) — covering the regular `spec`/`test`/`build` set, tolerating
+partially-already-deleted branches, and the quick route (only
+`task/{ref}` ever existed). After cleanup, the ref reports
+`not-initialised` again.
+
+**Pre-handoff spec review:** already done in full as part of the
+specs 12–15 batch sequencing review. No open questions remain in the
+working spec doc.
+
+## Previous scope: spec 14 (done)
 
 **Working spec doc:**
 `task-MAG-46-14-promote-pulled-and-rebase-spec.md` (copied alongside this
@@ -487,6 +508,57 @@ the interactive confirmation prompt had no home in `ExternalTools`
 `process.stdin` directly (same technique as every test file's existing
 `captureStdout()`, pointed the other direction), no `ExternalTools`
 change. No open questions remain in the working spec doc.
+
+**Test phase done** — merged via
+[PR #121](https://github.com/weaver-engineering/magpie-weaver/pull/121)
+(`test/MAG-46` → `build/MAG-46`, rebase-merged, confirmed 2 commits).
+Architect review found no defects — independently reproduced
+`build-gate` locally (123/123 tests pass, 100% new-line coverage) and
+read the full test file against all six required behaviors (§3.1–§3.6),
+confirming the interactive-confirmation mocking technique matched the
+spec's own §2.1 correction rather than reintroducing the harness gap.
+Build phase started (session `ses_02c93d58dffeZjQyJXyE4m8K2R`, `agent_1`).
+
+**Build phase found a second real bug via e2e testing that the mocked
+suite and CI both missed** — [PR #122](https://github.com/weaver-engineering/magpie-weaver/pull/122).
+Set up a disposable fixture (`test/ZZZZ-140` → `build/ZZZZ-140`, a
+genuinely merged PR — required since `merged-pending-pull` depends on
+`findMergedPR` seeing a real merged PR, not a mock) and ran the real
+built CLI against it: `pullFastForward()`'s `git branch -f <branch>
+origin/<branch>` fails with `fatal: Cannot force update the current
+branch.` whenever `<branch>` is the currently checked-out branch — which
+it always is here, since `promote`'s own `branchMismatch` guard (spec 10
+LLD §3.4) forces the caller onto `build/{ref}` before the
+`merged-pending-pull` resolution ever runs. Not an edge case: the same
+reasoning made §3.1's "no local `build/{ref}`" sub-case unreachable too
+(`branchExists` can't be `false` on the branch you're currently checked
+out on), so neither sub-case of this chunk's mainline behavior could
+succeed for real as originally built — only the mocked tests, where
+`pullFastForward`/`rebase`/`push` are plain `vi.fn()` doubles, passed.
+
+Relayed via a PR comment (the stopgap ad-hoc-prompt-plus-JSON-envelope
+pattern — MAG-47's standard review-comment template still not built,
+deferred until the MAG-46 backlog completes). `build-implementer`
+independently confirmed the same root cause on its own re-read, fixed
+`pullFastForward` to fast-forward in place with `git merge --ff-only`
+when the target is the current branch, and — going further than asked —
+also fixed `promote.ts`'s plain-vs-cascading distinction to compare
+`headSha` after the pull rather than relying on the now-understood-
+unreachable `branchExists` pre-check. Re-verified against a second real
+disposable fixture it built itself (`PR #124`, also requiring a human
+merge — self-merging is withheld from agents same as the architect),
+confirming the architect's exact failing repro now exits 0 with
+`action: "pulled"`. One incident along the way: mid-fix the session
+appeared to stall after a context compaction; interrupted cleanly via
+`POST /session/{id}/abort` (not the unreliable `/api/.../interrupt`
+path) and resumed without issue, also switching this session to
+`openrouter`'s `~deepseek/deepseek-v4-flash-latest` (1M-token context)
+for the remainder of this chunk's work, at the user's request, scoped
+to this session only.
+
+This is the fourth real bug e2e testing alone has caught in this
+backlog (`isAncestor`, `rebase()`, the spec-12 `test/{ref}` HEAD read,
+now this) — the mocked suite and CI were fully green every time.
 
 ## Previous scope: spec 13 (done)
 
