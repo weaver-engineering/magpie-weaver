@@ -467,7 +467,28 @@ future scheduler needs the same required-behavior-vs-merged-test diff as
 a standing check, not just something the architect currently does by
 hand.
 
-## Current Scope: spec 13
+## Current Scope: spec 14
+
+**Working spec doc:**
+`task-MAG-46-14-promote-pulled-and-rebase-spec.md` (copied alongside this
+file). `promote` resolves `merged-pending-pull` (derived in spec 12) into
+either `pulled` (plain fast-forward, no pre-existing `build/{ref}` commits)
+or `pulled-and-rebased` (gated by `--confirm-rebase` or an interactive
+`y/N` prompt, when `build/{ref}` already had build-phase commits that need
+reordering onto the fresh merge). `git.rebase()`/`pullFastForward()` are
+mocked in this chunk's own tests — the real primitives were proven for
+real by spec 13's e2e verification, so it's now safe for this build phase
+to call the real thing unattended.
+
+**Pre-handoff spec review:** already done in full as part of the
+specs 12–15 batch sequencing review. The one item that review produced —
+the interactive confirmation prompt had no home in `ExternalTools`
+(§2.1) — was resolved ahead of time and closed in the doc itself: mock
+`process.stdin` directly (same technique as every test file's existing
+`captureStdout()`, pointed the other direction), no `ExternalTools`
+change. No open questions remain in the working spec doc.
+
+## Previous scope: spec 13 (done)
 
 **Working spec doc:**
 `task-MAG-46-13-dev-testing-git-rebase-forward-spec.md` (copied alongside
@@ -516,6 +537,51 @@ free-tier 503 pattern): `sort`, `mktemp`, and `test` (the POSIX
 comparison command) were all missing entirely, needed for the real
 git-fixture construction this chunk's tests require. Fixed via
 `task/MAG-40` ([PR #115](https://github.com/weaver-engineering/magpie-weaver/pull/115)).
+
+**Build phase done** — [PR #118](https://github.com/weaver-engineering/magpie-weaver/pull/118)
+(`ready/MAG-46` → `main`, 3 commits: spec, test, build), CI green
+(`validate-main-gate`, `MainGate`), merged.
+
+The build-implementer session resumed from a crashed prior session that
+had left the real `rebase()`/`mergeBase()` implementation uncommitted
+but intact, plus one stray contaminated commit already cleaned up before
+the crash. On resume it misjudged which of two diverged test-commit
+shas carried the architect's already-landed §3.3 fixture fix (a
+double-`"init"` correction) — read the diff direction backwards, believed
+the fix lived in `origin/build/MAG-46` when it actually only existed in
+its own dangling local commit — and queued a `git restore
+--staged --worktree` that would have overwritten the fix with the
+unfixed content. Caught before it ran (architect review of the live
+session's pending permission prompt, not CI or any test): the user
+halted the session on their own client rather than approving it. Relayed
+the correct diff direction explicitly; the session re-verified it itself
+or re-derived it, corrected course, and committed the right content.
+
+One legitimate trunk-drift rebase followed (`main` had advanced one
+docs-only commit past the branch's merge-base after `ready/MAG-46` was
+created) — `git rebase --onto origin/main <merge-base> ready/MAG-46`,
+same class as spec 11.01's precedent, clean, no conflicts, 3-commit
+structure preserved.
+
+**Architect e2e verification** (real disposable bare-repo + working
+copy in scratch, not the sandbox fixture repo, cleaned up after): ran
+the actual built CLI (`node dist/cli.js --dev-testing git
+rebase/mergeBase -i`) against real git state for all three behaviors —
+`mergeBase()` matched plain `git merge-base` exactly; the commit-count
+precondition correctly refused a 2-commit branch and left it untouched;
+a genuine single-commit rebase produced a real, correctly-parented
+commit with the right file content and a clean working tree; a real
+conflicting rebase reported `status: "conflict"` and correctly left the
+repo mid-`rebase-apply` rather than auto-aborting — checked against the
+spec doc first since that looked surprising, confirmed intentional
+(§2.1: "leave the repository in whatever state `git rebase` itself
+leaves it in... that's a decision for `promote`'s own error handling,
+not this primitive"). No defects found this time — unlike specs 11.01
+and 12, where the same e2e-verification step is what caught the real
+bugs the mocked suite and CI both missed.
+
+`test/MAG-46`, `build/MAG-46`, `ready/MAG-46` deleted on origin and in
+both worktrees per the standard clear-down-stale-branches step.
 
 ## Previous scope: spec 12 (done)
 
