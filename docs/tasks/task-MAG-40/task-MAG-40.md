@@ -1039,6 +1039,43 @@ right next to their own `gh pr create` example: never run `gh pr merge`,
 on any PR, for any reason, including a fixture PR raised for
 verification purposes — report that a human merge is needed and stop.
 
+## 3bj. `external_directory` generalised to `/Users/simon/weaver-engineering/*`, replacing every magpie-weaver-specific path
+
+`test-writer`, reading the spec-16 doc at kickoff, hit an
+`external_directory` ask for
+`/Users/simon/weaver-engineering/agentWorkTrees/magpie-weaver/magpieweaver-docs/docs/setup/dev-env/task-phasing/*`
+— only the original repo location
+(`/Users/simon/weaver-engineering/MagpieWeaver/magpieweaver-docs*`) was
+allow-listed. Per the workspace `CLAUDE.md`, each agent worktree has a
+symlink to the shared `magpieweaver-docs` repo right alongside it so
+relative doc links resolve — a legitimate, expected access pattern the
+permission check doesn't see as equivalent, since it matches on the
+literal requested path, not the resolved symlink target.
+
+**Simon's review, correctly widening the fix rather than adding a third
+one-off entry:** these agent config files aren't magpie-weaver-specific
+by design — the intent is agents that work across whatever project
+they're pointed at, with real read/write scoping eventually prescribed
+per-invocation (`opencode -run`/SDK) once this moves past the current
+dogfooding phase, not hand-maintained in these files project by project.
+Baking in `MagpieWeaver/magpie-weaver*` and `MagpieWeaver/
+magpieweaver-docs*` already violated that, and a third
+`agentWorkTrees/magpie-weaver/...` entry would have made it worse, not
+better.
+
+Checked OpenCode's own permission schema first (`PermissionAction` is a
+plain `allow`/`deny`/`ask` enum) — `external_directory` has no separate
+read-only tier to reach for here; broadening the pattern is coarser
+than "read-only at the `weaver-engineering` level" would ideally be, not
+a like-for-like swap. Flagged to Simon before proceeding (full cleanup
+now vs. just fixing this one entry and leaving the older ones as debt);
+chose full cleanup. All three `MagpieWeaver/magpie-weaver*`,
+`MagpieWeaver/magpieweaver-docs*`, and `agentWorkTrees/magpie-weaver/
+magpieweaver-docs*` entries removed and replaced with a single
+`/Users/simon/weaver-engineering/*` pattern, in all three agents — covers
+every current and future sibling project under the workspace root
+without another project-specific entry ever being needed here again.
+
 ## 5. Acceptance criteria
 
 - Three sub-agent config files exist under `.opencode/agent/`, each with
