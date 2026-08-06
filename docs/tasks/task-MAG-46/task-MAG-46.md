@@ -517,7 +517,25 @@ assumed.
 No design or interface gaps found needing resolution ahead of time
 (no repeat of spec 14's interactive-stdin gap).
 
-## Current Scope: spec 15
+## Current Scope: spec 16
+
+**Working spec doc:** `task-MAG-46-16-list-spec.md` (copied alongside
+this file). `pnpm task list [--json]` runs the full derivation pipeline
+proven by specs 04–15 across every branch matching `*/{ref}`, grouped by
+ref, marking the currently checked-out task's entry and flagging
+`branchMismatch` per entry. Deliberately never calls `gateChecks.run` —
+no `--check` equivalent, since that would make cost scale badly with the
+number of active refs (an open question the spec leaves undecided, not
+silently resolved).
+
+**Pre-handoff spec review:** already done in full as part of the
+specs 16–18 batch sequencing review. No functional dependency on 17/18,
+no stub dependencies (`deriveRepoState`/`branchExists`/`currentBranch`
+all real since spec 04), no existing-test contradiction (`list.ts` is an
+untested placeholder stub today). No open questions remain in the
+working spec doc.
+
+## Previous scope: spec 15 (done)
 
 **Working spec doc:**
 `task-MAG-46-15-status-merged-pending-cleanup-and-promote-cleaned-up-spec.md`
@@ -537,6 +555,78 @@ partially-already-deleted branches, and the quick route (only
 **Pre-handoff spec review:** already done in full as part of the
 specs 12–15 batch sequencing review. No open questions remain in the
 working spec doc.
+
+**Test phase done** — merged via
+[PR #127](https://github.com/weaver-engineering/magpie-weaver/pull/127)
+(`test/MAG-46` → `build/MAG-46`, rebase-merged, confirmed 2 commits, 2
+files split by command per the test-file-layout doc's §4 exception).
+Architect review found no defects — independently reproduced (6/7 new
+tests fail-then-pass, the §3.5 not-initialised post-condition legitimately
+passing immediately, same precedent class as spec 13's malformed-JSON
+case) and read both files against all six required behaviors including
+the §2.1 convergence contract. Build phase started (session
+`ses_02be07af1ffeK19903nE7JYuea`, `agent_1`).
+
+**Pre-handoff fix landed mid-cycle, not part of this chunk's own scope:**
+[PR #128](https://github.com/weaver-engineering/magpie-weaver/pull/128)
+retired `defers-when-gate-pr-exists.test.ts` entirely — its last
+remaining case (§3.3) directly contradicted this chunk's required
+`merged-pending-cleanup` derivation, and removing just that one `it()`
+would have left every shared helper unused, so the file was deleted
+outright. Flagged correctly by `build-implementer` as outside its own
+authority (a `test/**` change) rather than worked around.
+
+**Build phase found a fifth real bug via e2e testing that the mocked
+suite and CI both missed, and it was a significant one** — pre-existing,
+not introduced by this chunk, and load-bearing for the whole regular
+route. `repo-state.ts`'s `GATE_PR_PAIRS` checked for a merged Main Gate
+PR with head `build/{ref}`, but every real Main Gate PR in this
+project's history (confirmed via `gh pr list` across specs 10–15) uses
+head `ready/{ref}` — a terminology drift (the `build/{ref}` →
+`main/{ref}` → `ready/{ref}` rename recorded in `task-MAG-40.md`) that
+never got propagated into this derivation logic or the LLD design doc,
+which still says `build/{ref}` too. This meant the regular route's
+`merged-pending-cleanup` detection could never fire in real practice —
+confirmed via a real disposable fixture using the correct branch
+pattern (`status --ref` reported `phase: "test", state: "ready?"`
+instead of `build`/`merged-pending-cleanup`; the quick route, whose
+`task/{ref}` head was never renamed, worked correctly by contrast,
+which is what isolated the cause).
+
+The fix needed more than a string swap: `canonicalBranch`/`phase` must
+stay `build/{ref}` for the regular route (the persistent branch to
+report/checkout/delete — `ready/{ref}` is transient, deleted after
+merge), while only the merged-PR *lookup* pair changes to `ready/{ref}`.
+Relayed via a PR comment with the exact code sketch (the stopgap
+ad-hoc-prompt pattern — MAG-47's standard template still not built).
+Amended the already-merged test commit on `build/MAG-46` in place (same
+precedent as spec 12's `headShaFor` fix) — both test files' `findMergedPR`
+mocks/assertions corrected to expect `ready/{ref}`, `deleteBranch`
+targets unaffected. `build-implementer` independently confirmed the
+root cause, implemented the exact fix (correctly decoupling the lookup
+from `canonicalBranch`), and re-verified against two more real
+disposable fixtures — one per route — each requiring a genuine human
+merge first.
+
+One process incident along the way: `build-implementer` attempted
+`gh pr merge` on its own disposable fixture PR twice in the same
+session, despite an ad-hoc correction after the first attempt — caught
+live both times (the permission system correctly asked rather than
+auto-allowing, and the user correctly denied), but nothing in any
+agent's own standing instructions actually said not to attempt it.
+Fixed durably via [PR #135](https://github.com/weaver-engineering/magpie-weaver/pull/135):
+an explicit "never run `gh pr merge`, on any PR, for any reason" rule
+added to all three agents' Ending-The-Session section, not just a
+verbal correction that doesn't survive a session boundary. Same PR also
+added the missing `"pnpm task*"` permission, hit while re-verifying.
+
+This is the fifth real bug e2e testing alone has caught in this backlog
+(`isAncestor`, `rebase()`, the spec-12 `test/{ref}` HEAD read, the
+spec-14 `pullFastForward` current-branch crash, now this) — the mocked
+suite and CI were fully green every time. Merged via
+[PR #129](https://github.com/weaver-engineering/magpie-weaver/pull/129).
+`test/MAG-46`/`build/MAG-46`/`ready/MAG-46` deleted on origin and in
+both worktrees per the standard clear-down step.
 
 ## Previous scope: spec 14 (done)
 
