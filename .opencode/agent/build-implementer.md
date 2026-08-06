@@ -100,6 +100,7 @@ permission:
     "pnpm build*": allow
     "timeout *": allow
     "sed -n*": allow
+    "sed *": allow
     "python3*": allow
     "rm -rf*": allow
     "rm -f*": allow
