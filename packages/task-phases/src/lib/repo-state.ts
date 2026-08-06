@@ -12,11 +12,20 @@ const PHASE_PREFIXES = ["spec", "test", "build", "task"] as const;
 
 /** The base/head pairs whose merge/open state drives the §3.2 pipeline
  * ahead of branch-exists derivation: the two Main Gate PRs
- * (`build/{ref}` / `task/{ref}` -> `main`) and the Build Gate PR
+ * (`ready/{ref}` / `task/{ref}` -> `main`) and the Build Gate PR
  * (`test/{ref}` -> `build/{ref}`). Merged pair first, then open, in LLD
- * §3.2's order. */
+ * §3.2's order.
+ *
+ * The regular route's Main Gate PR head is `ready/{ref}`, NOT `build/{ref}`
+ * — every real Main Gate PR in this project's history uses `ready/{ref}`
+ * (the `main/{ref}` -> `ready/{ref}` rename recorded in task-MAG-40.md;
+ * `build/{ref}` is the static staging branch `ready/{ref}` forks from,
+ * never the PR head). The merged-PR *lookup* therefore checks
+ * `ready/{ref}`, while the derived canonicalBranch/phase stay `build/{ref}`
+ * — `ready/{ref}` is transient and deleted after the merge, `build/{ref}`
+ * is the persistent branch to report/checkout/delete. */
 const GATE_PR_PAIRS: ReadonlyArray<readonly [base: string, head: string]> = [
-  ["main", "build/{ref}"],
+  ["main", "ready/{ref}"],
   ["main", "task/{ref}"],
   ["build/{ref}", "test/{ref}"],
 ] as const;
@@ -44,10 +53,11 @@ async function anyPhaseBranchExists(
  * owns, or `null` when no owned PR drives the state (so branch-exists
  * derivation applies). The merged Build Gate PR (`build/{ref}` <-
  * `test/{ref}`) derives `merged-pending-pull` for the ordinary merge
- * (spec 12 §3.1/§3.2); the merged Main Gate pairs (`main`/`build/{ref}`,
- * `main`/`task/{ref}`) and the regular route's open Main Gate PR still
- * defer ("not implemented") — those states (`merged-pending-cleanup` and
- * the regular route's Main-Gate `awaiting-pr`) are owned by MAG-46-15.
+ * (spec 12 §3.1/§3.2); the merged Main Gate pairs (`main`/`ready/{ref}`,
+ * `main`/`task/{ref}`) derive `merged-pending-cleanup` (MAG-46-15 §3.1)
+ * when local `main` hasn't caught up with the merge. The regular route's
+ * open Main Gate PR still defers ("not implemented") — that state (the
+ * regular route's Main-Gate `awaiting-pr`) is owned by a later chunk.
  * The open Build Gate PR (`test/{ref}` -> `build/{ref}`) derives `awaiting-pr`
  * attached to the **source** phase `test` (spec 11 §3.2/§3.4); the open quick
  * route's Main Gate PR (`main`/`task/{ref}`) derives `awaiting-pr` attached to
@@ -119,8 +129,37 @@ async function derivePrState(
           };
         }
       }
-      // A merged PR on the Main Gate pairs, or the superseded-merge Build
-      // Gate case, is an unconditional deferral.
+      // The merged Main Gate pairs (`main`/`ready/{ref}` regular route,
+      // `main`/`task/{ref}` quick route) derive `merged-pending-cleanup`
+      // (MAG-46-15 §3.1) when local `main` hasn't caught up with the merge
+      // yet. The "change not in main" confirmation is
+      // `isAncestor(mergeCommitOid, "main")` — the PR's own merge commit's
+      // reachability from local `main`, not merely "a merged PR exists".
+      if (base === "main") {
+        // The regular route's merged-PR head is `ready/{ref}` (see
+        // GATE_PR_PAIRS), but the canonical branch/phase stay `build/{ref}`
+        // — `ready/{ref}` is transient and gone after the merge, while
+        // `build/{ref}` is the persistent branch to report/checkout/delete.
+        const isRegularRoute = head === "ready/{ref}";
+        const canonicalBranch = isRegularRoute ? `build/${ref}` : headName;
+        const phase: Phase = isRegularRoute ? "build" : "quick";
+        if (!(await tools.git.isAncestor(merged.mergeCommitOid, "main"))) {
+          return {
+            ref,
+            phase,
+            canonicalBranch,
+            currentBranch,
+            branchMismatch: currentBranch !== canonicalBranch,
+            state: "merged-pending-cleanup",
+          };
+        }
+        // Local `main` has already caught up with the merge — the merged PR
+        // no longer drives the state; fall through to the no-PR derivation
+        // for whatever branches survive.
+        continue;
+      }
+      // The superseded-merge Build Gate case (and, defensively, any other
+      // unowned merged pair) is an unconditional deferral.
       throw new Error("not implemented");
     }
     const open = await tools.github.findOpenPR(baseName, headName);
@@ -130,8 +169,8 @@ async function derivePrState(
       // attached to the **source** phase of that PR — `quick`, never the
       // destination `main` (spec 11.01 §3.4, §2.1's one-derivation-for-all-
       // routes). The regular route's open Main Gate PR
-      // (`main`/`build/{ref}`) and both merged pairs still defer to
-      // MAG-46-12/15.
+      // (`main`/`ready/{ref}`) still defers — its awaiting-pr is owned by
+      // a later chunk.
       if (base === "main" && head === "task/{ref}") {
         const canonicalBranch = `task/${ref}`;
         return {
@@ -157,6 +196,53 @@ async function derivePrState(
         branchMismatch: currentBranch !== canonicalBranch,
         state: "awaiting-pr",
       };
+    }
+  }
+  return null;
+}
+
+/** MAG-46-15 §3.2's interrupted-cleanup retrigger: no gate PR is found
+ * (the PR-driven stage above ran and found nothing), yet a surviving phase
+ * branch is already an ancestor of local `main` — the Main Gate content is
+ * in `main`, and a prior, interrupted cleanup left the branch behind.
+ * Derives the SAME `merged-pending-cleanup` state as §3.1's ordinary
+ * route (never a distinct "stale"/"broken" state).
+ *
+ * The trigger is deliberately narrow, matching the cleanup semantics:
+ *   - `spec/{ref}` must already be gone — it is the FIRST branch the
+ *     cleanup deletes, so its absence is what distinguishes an
+ *     interrupted cleanup from ordinary in-progress work (whose spec/
+ *     test/build branches all still exist).
+ *   - a `test/{ref}` or `build/{ref}` survivor must exist locally and be
+ *     an ancestor of local `main` (the ancestry check the §3.2 Given
+ *     pins: `isAncestor("test/{ref}", "main")`).
+ *   - the caller must be on `main` (a `status` read) or the retrigger's
+ *     canonical branch `build/{ref}` (a `promote` invocation — whose own
+ *     `branchMismatch` guard forces the caller there anyway). */
+async function derivePendingCleanupRetrigger(
+  tools: ExternalTools,
+  ref: string,
+  currentBranch: string,
+): Promise<TaskStatus | null> {
+  if (await tools.git.branchExists(`spec/${ref}`)) {
+    return null;
+  }
+  const canonicalBranch = `build/${ref}`;
+  if (currentBranch !== "main" && currentBranch !== canonicalBranch) {
+    return null;
+  }
+  for (const branch of [`test/${ref}`, `build/${ref}`]) {
+    if (await tools.git.branchExists(branch)) {
+      if (await tools.git.isAncestor(branch, "main")) {
+        return {
+          ref,
+          phase: "build",
+          canonicalBranch,
+          currentBranch,
+          branchMismatch: currentBranch !== canonicalBranch,
+          state: "merged-pending-cleanup",
+        };
+      }
     }
   }
   return null;
@@ -322,6 +408,15 @@ export async function deriveRepoState(
   const prState = await derivePrState(tools, ref, currentBranch);
   if (prState !== null) {
     return prState;
+  }
+
+  // MAG-46-15 §3.2: with no gate PR found, an interrupted prior cleanup
+  // (spec/{ref} already deleted, a surviving test/build branch already an
+  // ancestor of local main) still derives merged-pending-cleanup — the
+  // retrigger converges on the identical state as §3.1's ordinary route.
+  const retrigger = await derivePendingCleanupRetrigger(tools, ref, currentBranch);
+  if (retrigger !== null) {
+    return retrigger;
   }
 
   const { phase, canonicalBranch, staleTestBranch } = await derivePhase(tools, ref);
