@@ -517,16 +517,62 @@ assumed.
 No design or interface gaps found needing resolution ahead of time
 (no repeat of spec 14's interactive-stdin gap).
 
-## Current Scope: spec 16
+## Current Scope: spec 17
 
-**Working spec doc:** `task-MAG-46-16-list-spec.md` (copied alongside
-this file). `pnpm task list [--json]` runs the full derivation pipeline
-proven by specs 04–15 across every branch matching `*/{ref}`, grouped by
-ref, marking the currently checked-out task's entry and flagging
-`branchMismatch` per entry. Deliberately never calls `gateChecks.run` —
-no `--check` equivalent, since that would make cost scale badly with the
-number of active refs (an open question the spec leaves undecided, not
-silently resolved).
+**Working spec doc:** `task-MAG-46-17-switch-spec.md` (copied alongside
+this file). `pnpm task <ref> [--wip [title] [message]] [--json]` derives
+`<ref>`'s current canonical branch via `deriveRepoState()` and checks it
+out, optionally committing WIP on the branch being left first.
+
+**Pre-handoff spec review:** no functional dependency on 18, no stub
+dependencies — `deriveRepoState` (real since spec 04), `checkout`/
+`isDirty`/`commitAll` (real since spec 05.01/07, confirmed directly
+against `deps/git.ts` rather than taken on the spec's own word, given
+spec 16 was exactly this kind of check being true-but-incomplete). No
+existing-test contradiction: `commands/task.ts`'s `ref()` is an
+untested placeholder throwing `"not implemented"`, explicitly marked
+"Unimplemented until MAG-46-17"; no test file exists yet at
+`test/packages/task-phases/task/`; `registry.ts` already wires
+`ref` into dispatch. No open questions remain in the working spec doc.
+
+**Spec-phase setup hit a real, previously-latent tool limitation — worth
+recording, not spec 17's scope to fix.** Creating `spec/MAG-46` and
+forking `test/MAG-46` for this chunk (the ordinary architect/pnpm task
+init+fork setup) made `pnpm task status`/`list` against ref `MAG-46`
+itself start throwing. Root cause: `derivePrState`'s `GATE_PR_PAIRS`
+loop finds a merged Build Gate PR for `(build/{ref}, test/{ref})`
+unconditionally, by branch *name* alone — and `MAG-46` is unique in this
+project in reusing that exact branch-name pair across 21+ independent
+chunks, since every real task ref is normally used once and retired.
+Two distinct symptoms, same root cause:
+* Right after a chunk's phase branches are cleared down (before the next
+  chunk's `test/{ref}` is pushed), `origin/test/{ref}` briefly doesn't
+  exist at all, and `headSha('origin/${headName}')` crashes with no
+  error handling — an unhandled-unresolvable-ref bug in the same family
+  as spec 16's two, just in `derivePrState` rather than `derivePhase`/
+  `deriveState`.
+* Once `test/{ref}` exists again but its HEAD doesn't match the
+  *previous* chunk's already-merged PR (true for every fresh chunk),
+  derivation falls into the "superseded merge" branch, which is a
+  **deliberate, already-documented deferral** in the code itself
+  (`repo-state.ts`'s own comment names it "MAG-46-13/14's concern") —
+  not a bug, just not yet implemented.
+Neither blocks spec 17's actual test-writing work, which reads git state
+directly rather than through `status`/`list` for this self-hosted ref.
+Left as found for whenever MAG-46-13/14's deferred concern gets picked
+up for real — fixing the `derivePrState` crash properly would also want
+a test fixture that models a *reused* ref, which no existing fixture
+does (every one uses a fresh, once-only `AAA-123`-style ref).
+
+## Previous scope: spec 16 (done)
+
+**Working spec doc:** `task-MAG-46-16-list-spec.md`. `pnpm task list
+[--json]` runs the full derivation pipeline proven by specs 04–15 across
+every branch matching `*/{ref}`, grouped by ref, marking the currently
+checked-out task's entry and flagging `branchMismatch` per entry.
+Deliberately never calls `gateChecks.run` — no `--check` equivalent,
+since that would make cost scale badly with the number of active refs
+(an open question the spec leaves undecided, not silently resolved).
 
 **Pre-handoff spec review:** already done in full as part of the
 specs 16–18 batch sequencing review. No functional dependency on 17/18,
@@ -555,9 +601,67 @@ remote-tracking branch in short form, one call, letting the caller
 strip prefixes and group both forms of the same branch under one
 `{ref}`. Same treatment as spec 11's `createRemoteBranch` addition: new
 interface surface landing with the chunk that needs it, not a stub
-being resolved. Corrected in place in the LLD and the working spec doc
-(`spec/MAG-46`'s spec commit amended, not yet merged so no
-already-merged-commit precedent needed this time).
+being resolved. Corrected in place in the LLD and the working spec doc,
+and formally recorded in magpieweaver-docs via
+[PR #92](https://github.com/weaver-engineering/magpieweaver-docs/pull/92)
+once the chunk closed out.
+
+**Test phase done** — merged via
+[PR #141](https://github.com/weaver-engineering/magpie-weaver/pull/141)
+(`test/MAG-46` → `build/MAG-46`).
+
+**Build phase found a sixth and seventh real bug via e2e testing, both
+missed by the fully-mocked 133/133-passing suite.** `build-implementer`'s
+first pass (PR #143 as raised) fixed a real crash: a ref reachable only
+via `origin/test/{ref}` (never checked out locally) made `derivePhase`
+pass a bare, unresolved branch name into `isAncestor`/`hasCommitsBeyond`,
+which fails with "unknown revision" — fixed with a `resolveBranchRef`
+helper (bare name if local, else `origin/<branch>`), applied to
+`canonicalBranch` across all three of `derivePhase`'s return paths.
+
+Independently re-verified against a real disposable fixture (bare
+`origin` + a clone, `spec`/`test` branches pushed then deleted locally)
+rather than trusting the mocked suite — and found a second, more subtle
+bug one level deeper: `deriveState` also calls `hasCommitsBeyond` with
+`deriveParentBranch(phase, ref)`'s output, which for the `test` phase's
+parent (`spec/{ref}`) was still an unresolved bare name.
+`RealGitTool.hasCommitsBeyond` swallows a failed `rev-parse --verify` on
+the parent into `false` instead of throwing, so a genuinely remote-only
+parent silently reported `not-started` where the correct state was
+`ready?` — a silent wrong answer, worse than the original crash, and
+invisible to any test built on a mocked `git` double. Relayed via PR
+comment with the exact repro; `build-implementer` fixed it with a
+narrowly-scoped `resolveParentBranch` (only the `test` phase's parent —
+resolving `build`'s already-prefixed `origin/build/{ref}` or
+`spec`/`quick`'s `main` would have mangled them) and added a
+fixture-level (real git, not mocked) regression test,
+`list/remote-only-fixture.test.ts`. Both fixes independently
+re-verified against fresh disposable fixtures before sign-off. Merged
+via [PR #143](https://github.com/weaver-engineering/magpie-weaver/pull/143).
+See [[feedback_mocked_tests_miss_swallowed_git_errors]] (architect
+memory) for the general lesson.
+
+**Process incident: the build-implementer OpenCode session froze for
+~76 minutes mid-fix**, stuck on a permission `ask` for a routine
+scratch-file write (`/tmp/ses_.../*`) that every earlier identical check
+in the same session had auto-allowed — one request fell through to a
+catchall `*` rule instead of the standing `/tmp*` allow rule, and with
+nobody attached within the permission request's short server-side
+expiry window, the turn hung permanently (the documented OpenCode
+headless-permission dead end). Diagnosed via `opencode.log` (the `asking
+id=... permission=external_directory` line with nothing logged after
+it) rather than guessing from CLI symptoms alone. Recovered cleanly via
+the session-scoped `POST /session/{id}/abort` API — no server restart,
+no other sessions disturbed — then resent the pending follow-up; the
+agent resumed and finished the fix normally. The permission-glob miss
+itself is still unexplained and worth a look (same class as
+[[project_opencode_permission_glob_tightening]]), but didn't block this
+chunk.
+
+`spec/MAG-46`/`test/MAG-46`/`build/MAG-46` cleared down via `pnpm task
+promote` (dogfooded — MAG-46 matches the tool's own `[A-Z]+-[0-9]+` ref
+pattern) once PR #143 merged, confirming the clear-down-per-cycle
+practice for a sixth cycle in a row.
 
 ## Previous scope: spec 15 (done)
 
