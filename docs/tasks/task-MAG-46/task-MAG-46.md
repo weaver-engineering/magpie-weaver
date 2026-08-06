@@ -517,13 +517,13 @@ assumed.
 No design or interface gaps found needing resolution ahead of time
 (no repeat of spec 14's interactive-stdin gap).
 
-## Current Scope: spec 18 (final chunk)
+## MAG-46 complete — spec 18 (final chunk, done)
 
-**Working spec doc:** `task-MAG-46-18-init-status-ref-flag-variants-spec.md`
-(copied alongside this file). The remaining documented `init`/`status`/
-`<ref>` flag variants earlier chunks deliberately deferred: `init --doc`/
-`--specs`/`--wip` (carry-forward), graceful degradation on a missing
-`.task-phases.json`, and `status --fix`.
+**Working spec doc:** `task-MAG-46-18-init-status-ref-flag-variants-spec.md`.
+The remaining documented `init`/`status`/`<ref>` flag variants earlier
+chunks deliberately deferred: `init --doc`/`--specs`/`--wip`
+(carry-forward), graceful degradation on a missing `.task-phases.json`,
+and `status --fix`.
 
 **Pre-handoff spec review:** no functional dependency beyond this chunk
 (the last one), no stub dependencies — `fileSystem.copyFile`/`exists`/
@@ -539,6 +539,89 @@ logic of any kind. Target test files (`init/flag-variants.test.ts`,
 `wipCarriedForward` and `StatusCommandResult.fixed` already exist in
 `types.ts`, matching the spec's required fields exactly. No open
 questions remain in the working spec doc.
+
+**Test phase found a real, architect-owned bug in its own fixture —
+build-implementer caught it, not architect review.** Merged via
+[PR #150](https://github.com/weaver-engineering/magpie-weaver/pull/150)
+(`test/MAG-46` → `build/MAG-46`). The §3.4 bad-`--specs` case's default
+fixture made `good-spec.md` and `missing-spec.md` resolve identically
+via `fileSystem.exists()` (only `templates/*` existed), yet the test
+demanded one copy and the other warn-and-skip — unsatisfiable by any
+implementation, since the real (correct) design never calls `exists()`
+for `--specs` at all, instead treating a rejected `copyFile` as the
+failure signal. Architect review confirmed fail-then-pass and a green
+full suite but never asked whether the fixture was answerable by *any*
+correct implementation — see
+[[feedback_unsatisfiable_test_fixture]]. `build-implementer` correctly
+recognised this as outside its own authority (`test/**`) and reported
+`needs-architect-intervention` with the exact mechanism rather than
+guessing at a workaround. Fixed by making the mock `copyFile` reject
+for the bad path and correcting the assertion; verified against
+`build-implementer`'s actual implementation before pushing either the
+amended `test/MAG-46` or the force-pushed `build/MAG-46` (disclosed on
+the PR).
+
+**Build phase done, no further defects — the final chunk, given the
+full e2e treatment.** Merged via
+[PR #152](https://github.com/weaver-engineering/magpie-weaver/pull/152).
+Architect review combined a code read (the `lib/wip-commit.ts`
+extraction correctly dedupes WIP-commit logic across `wip`/
+`init --wip`/`status --fix --wip`, behavior-preserving) with **six**
+real e2e scenarios against disposable fixtures: `--doc`, `--specs`
+(happy path and the exact bad-path case PR #150's fix corrected, now
+confirmed against the real implementation), `--wip` carry-forward (a
+genuine commit landing on the branch being left, before the new branch
+existed), a genuinely-absent `.task-phases.json`, and a real
+`status --fix` branch switch built from an actual spec/test staleness
+mismatch (`git merge-base --is-ancestor` confirmed non-ancestor for
+real).
+
+**One more standing-permission/tooling gap closed along the way, not
+scoped to any one spec chunk:**
+[PR #151](https://github.com/weaver-engineering/magpie-weaver/pull/151)
+— `.opencode/tool/gate-check.ts` and `task.ts` both shelled out via
+`execFile` with no `cwd`, so every call ran against the OpenCode
+server's own working directory (the main detached-HEAD checkout)
+regardless of which session/worktree actually invoked the tool. Agents
+across many sessions had independently rediscovered this as an
+"environment quirk" and worked around it rather than it ever surfacing
+as a bug — see [[feedback_opencode_tool_cwd_bug]]. Fixed by reading the
+plugin SDK's own `context.directory` (already used correctly by the
+third custom tool, `session-info.ts`) and passing it as `cwd`.
+
+`spec/MAG-46`/`test/MAG-46`/`build/MAG-46` cleared down via `pnpm task
+promote` once PR #152 merged; stale `ready/MAG-46` deleted separately,
+same as every prior cycle — the eighth and last time this task reuses
+that pattern, and the one that finally prompted fixing it (below)
+rather than repeating it a ninth time.
+
+**Final quick-route fix, folded into this close-out PR before merge
+(user-directed):** `promote`'s `merged-pending-cleanup` regular-route
+`branchesToDelete` list (`commands/promote.ts`) predates the
+`build/{ref}` -> `ready/{ref}` rename and never included `ready/{ref}`
+itself — the Main Gate PR's actual (transient) head branch, silently
+left behind and requiring a manual `git push origin --delete` every
+single cycle, confirmed by dogfooding this exact command against
+MAG-46 across all eight of its own regular-route cycles. Added
+`ready/{ref}` to the regular-route branch set (quick route unaffected —
+it never creates one). Updated the three regular-route assertions in
+the already-existing `test/packages/task-phases/promote/cleaned-up
+.test.ts` accordingly (architect-owned, per [[feedback_bundling_in_chunk_test_fixes]]'s
+precedent for a deliberate, disclosed behavior change — not a
+test-writer/build-implementer edit). Verified: full suite (147/147)
+plus a real e2e fixture (bare origin + a second clone simulating the
+PR merge landing remotely, so local `main` genuinely lagged
+`origin/main`) confirming `ready/{ref}` is now actually deleted, both
+locally and on origin, alongside the other three.
+
+**MAG-46 (Tool up task phasing) is done.** All 18 spec chunks (plus
+the dev-testing/scaffolding groundwork specs 00–03) shipped through the
+full spec → test → build cycle, each independently reviewed and, for
+every build phase, verified against real git rather than trusted from
+a green mocked suite alone. `pnpm task {init,status,list,promote,wip,
+<ref>}` are all real, fully-flagged implementations — no stub or
+placeholder surface remains. Linear status update is a separate,
+human step from here.
 
 ## Previous scope: spec 17 (done)
 
