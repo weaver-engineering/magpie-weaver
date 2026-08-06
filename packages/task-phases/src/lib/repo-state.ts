@@ -248,11 +248,45 @@ async function derivePendingCleanupRetrigger(
   return null;
 }
 
+/** True if `branch` exists locally or on `origin` — `derivePhase` consults
+ * remote-tracking branches too: `list` (MAG-46-16 §2.1) treats a ref
+ * reachable only via `origin/test/{ref}` (never checked out locally) as
+ * exactly as active as one with a local branch, and `deriveRepoState` is the
+ * one shared pipeline every command derives through. */
+async function branchExistsAnywhere(
+  tools: ExternalTools,
+  branch: string,
+): Promise<boolean> {
+  return (
+    (await tools.git.branchExists(branch)) ||
+    (await tools.git.branchExists(branch, { remote: true }))
+  );
+}
+
+/** Resolves the git ref that actually names a branch, which may exist only
+ * on `origin` (MAG-46-16 §2.1). Returns the bare local name when the branch
+ * is checked out locally, else the `origin/`-prefixed remote-tracking ref —
+ * the caller has already confirmed via `branchExistsAnywhere` that one of
+ * the two exists. `isAncestor`/`hasCommitsBeyond` (and `headCommitTitle`)
+ * take refs git must resolve; passing a bare name for a branch that only
+ * exists on origin makes `git rev-list --count <parent>..<branch>` fail with
+ * "unknown revision". This is the resolution `derivePhase` must apply to
+ * whatever it returns as `canonicalBranch`, for every phase. */
+async function resolveBranchRef(tools: ExternalTools, branch: string): Promise<string> {
+  return (await tools.git.branchExists(branch)) ? branch : `origin/${branch}`;
+}
+
 /** Derives the phase whose branch is currently authoritative for `ref`,
  * alongside that phase's canonical branch, in the no-PR case (LLD §3.2's
  * branch-exists chain). `test/{ref}` is the authority unless `spec/{ref}`
  * was amended after the fork — the staleness check (§3.5) — in which case
- * derivation falls back to `spec`, and `test/{ref}` is never consulted. */
+ * derivation falls back to `spec`, and `test/{ref}` is never consulted.
+ * Branch existence is checked on origin too: a ref reachable only via
+ * `origin/test/{ref}` is exactly as active as one with a local branch
+ * (MAG-46-16 §2.1) — and the `canonicalBranch` returned always resolves
+ * locally (`resolveBranchRef`), because downstream `deriveState` feeds it
+ * to `hasCommitsBeyond`/`headCommitTitle` as the branch argument, which
+ * must be a real ref, not a bare name for a remote-only branch. */
 async function derivePhase(
   tools: ExternalTools,
   ref: string,
@@ -261,21 +295,30 @@ async function derivePhase(
   const specBranch = `spec/${ref}`;
   const taskBranch = `task/${ref}`;
 
-  if (await tools.git.branchExists(testBranch)) {
+  if (await branchExistsAnywhere(tools, testBranch)) {
     // Staleness check (§3.5): `spec/{ref}` amended after `test/{ref}`
     // forked makes spec authoritative — test is simply not consulted. The
     // flag itself is surfaced to `deriveRepoState`, whose §3.5 rebase-forward
     // detection turns it into the "rebase test/{ref} onto spec/{ref}" trigger.
-    if (!(await tools.git.isAncestor(specBranch, testBranch))) {
-      return { phase: "spec", canonicalBranch: specBranch, staleTestBranch: true };
+    // Only meaningful when `spec/{ref}` itself exists — a test branch with no
+    // spec branch at all cannot be stale relative to one. Both branches are
+    // read via their resolvable refs (`resolveBranchRef`): each may exist
+    // only on origin (the bare local name wouldn't resolve, while the
+    // remote-tracking ref is exactly what `fetch()` keeps fresh).
+    if (await branchExistsAnywhere(tools, specBranch)) {
+      const specRef = await resolveBranchRef(tools, specBranch);
+      const testRef = await resolveBranchRef(tools, testBranch);
+      if (!(await tools.git.isAncestor(specRef, testRef))) {
+        return { phase: "spec", canonicalBranch: specRef, staleTestBranch: true };
+      }
     }
-    return { phase: "test", canonicalBranch: testBranch, staleTestBranch: false };
+    return { phase: "test", canonicalBranch: await resolveBranchRef(tools, testBranch), staleTestBranch: false };
   }
-  if (await tools.git.branchExists(specBranch)) {
-    return { phase: "spec", canonicalBranch: specBranch, staleTestBranch: false };
+  if (await branchExistsAnywhere(tools, specBranch)) {
+    return { phase: "spec", canonicalBranch: await resolveBranchRef(tools, specBranch), staleTestBranch: false };
   }
-  if (await tools.git.branchExists(taskBranch)) {
-    return { phase: "quick", canonicalBranch: taskBranch, staleTestBranch: false };
+  if (await branchExistsAnywhere(tools, taskBranch)) {
+    return { phase: "quick", canonicalBranch: await resolveBranchRef(tools, taskBranch), staleTestBranch: false };
   }
   // A phase branch exists (anyPhaseBranchExists returned true) but none
   // of the three derivable phases matches — the only remaining prefix is
@@ -325,7 +368,8 @@ async function deriveState(
   ref: string,
   canonicalBranch: string,
 ): Promise<TaskState> {
-  if (!(await tools.git.hasCommitsBeyond(canonicalBranch, deriveParentBranch(phase, ref)))) {
+  const parent = await resolveParentBranch(tools, phase, ref);
+  if (!(await tools.git.hasCommitsBeyond(canonicalBranch, parent))) {
     return "not-started";
   }
   const title = await tools.git.headCommitTitle(canonicalBranch);
@@ -333,6 +377,31 @@ async function deriveState(
     return "work-in-progress";
   }
   return "ready?";
+}
+
+/** Resolves the parent branch `deriveState` derives against — the sibling of
+ * `resolveBranchRef` but for the *parent* argument of `hasCommitsBeyond`.
+ * `deriveParentBranch` returns three shapes: bare `spec/{ref}` (test phase),
+ * already-remote-tracking `origin/build/{ref}` (build), and fixed `main`
+ * (spec/quick). Only the first is a phase branch that may exist solely on
+ * `origin` and so needs `resolveBranchRef`; the other two already resolve
+ * as-is (`origin/build/{ref}` is a remote-tracking ref, and `main` is a real
+ * local ref — running `resolveBranchRef` over `main` would wrongly turn it
+ * into `origin/main`, and over `origin/build/{ref}` into
+ * `origin/origin/build/{ref}`). An unresolved bare `spec/{ref}` for a
+ * remote-only ref would otherwise be swallowed by
+ * `RealGitTool.hasCommitsBeyond`'s failed-parent fallback (deps/git.ts) and
+ * report `not-started` where the correct state is `ready?` — a silent wrong
+ * answer, not a crash. */
+async function resolveParentBranch(
+  tools: ExternalTools,
+  phase: Phase,
+  ref: string,
+): Promise<string> {
+  if (phase === "test") {
+    return resolveBranchRef(tools, `spec/${ref}`);
+  }
+  return deriveParentBranch(phase, ref);
 }
 
 /** LLD §3.7's phase -> destination-gate table, keyed off `status.phase` —

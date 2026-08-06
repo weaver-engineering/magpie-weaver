@@ -172,6 +172,7 @@ const DEV_TESTING_TOOLS: Record<
       pullFastForward: ["branch"],
       rebase: ["branch", "ontoRef"],
       deleteBranch: ["branch"],
+      listBranches: [],
     },
   },
   gh: {
