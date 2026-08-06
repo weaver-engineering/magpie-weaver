@@ -20,15 +20,14 @@ export default tool({
         "Raw CLI arguments after the command, e.g. [\"--ref\", \"AAA-001\", \"--check\"] for status, [\"AAA-001\", \"--title\", \"New task\"] for init, or [\"WIP fix\", \"message\"] for wip. Omit for commands that take none (e.g. plain \"list\").",
       ),
   },
-  async execute(args) {
+  async execute(args, context) {
     let stdout: string;
     try {
-      ({ stdout } = await run("pnpm", [
-        "task",
-        args.command,
-        ...(args.args ?? []),
-        "--json",
-      ]));
+      ({ stdout } = await run(
+        "pnpm",
+        ["task", args.command, ...(args.args ?? []), "--json"],
+        { cwd: context.directory },
+      ));
     } catch (e) {
       // Exit 1 (command ran and either threw or returned success: false)
       // still writes valid JSON to stdout with --json - an ordinary

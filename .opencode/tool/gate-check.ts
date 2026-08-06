@@ -17,7 +17,7 @@ export default tool({
       .optional()
       .describe("Raw --flag value pairs the check needs, e.g. [\"--ref\", \"AAA-001\", \"--pr-title\", \"AAA-001: fix thing\"]. See the check's own argDescriptions from the list output to know what each check requires."),
   },
-  async execute(args) {
+  async execute(args, context) {
     const cliArgs =
       args.checkName === undefined || args.checkName === "list"
         ? ["--list", "--json"]
@@ -25,7 +25,7 @@ export default tool({
 
     let stdout: string;
     try {
-      ({ stdout } = await run("pnpm", ["gate-check", ...cliArgs]));
+      ({ stdout } = await run("pnpm", ["gate-check", ...cliArgs], { cwd: context.directory }));
     } catch (e) {
       // gate-checks' CLI writes valid JSON on --json regardless of exit
       // code (0/1/2 alike) — a failing or invalid-argument result is
