@@ -1,5 +1,6 @@
 import type { ExternalTools, Phase, StatusCommandResult, TaskState, TaskStatus } from "../types.js";
 import { deriveRepoState, resolveReady } from "../lib/repo-state.js";
+import { commitWipOnCurrentBranch, deriveRefFromBranch } from "../lib/wip-commit.js";
 
 /**
  * `pnpm task status ...` — see task-phasing-lld.md §3.9. Implements the
@@ -9,28 +10,16 @@ import { deriveRepoState, resolveReady } from "../lib/repo-state.js";
  * branches themselves (`not-started` vs `ready?` vs `work-in-progress`,
  * specs 06/09). `--check` (MAG-46-09 §2.1) opts into resolving `ready?` to
  * `ready`/`blocked` via `resolveReady()`, and refuses — exit 1 — when
- * `--ref <other>` asks to check a task other than the one checked out. The
+ * `--ref <other>` asks to check a task other than the one checked out.
+ * `--fix` (MAG-46-18) switches to the canonical branch on a mismatch
+ * (reporting `fixed: true`), optionally committing WIP first when `--wip`
+ * is also given; it is a no-op when already canonical (`fixed: false`).
+ * The
  * derivation itself lives in `lib/repo-state.ts` (LLD §4.5) — shared with
  * every other command that needs the same {ref, phase, state} pipeline, not
- * reimplemented here.
+ * reimplemented here. The `--wip`-related helpers live in
+ * `lib/wip-commit.ts`, shared with `wip` and `init --wip` (§3.12).
  */
-
-/** The four phase-branch prefixes a ref can be checked out on — used only
- * to derive a ref from the current branch name below; `lib/repo-state.ts`
- * has its own copy for its own, distinct purpose (existence checks). */
-const PHASE_PREFIXES = ["spec", "test", "build", "task"] as const;
-
-/** Derives a task ref from a checked-out branch name — `spec/AAA-001` ->
- * `AAA-001`. Returns `null` when the branch is not a phase branch (e.g.
- * `main`); no attempt is made to derive a ref from `main` itself. */
-function deriveRefFromBranch(branch: string): string | null {
-  for (const prefix of PHASE_PREFIXES) {
-    if (branch.startsWith(`${prefix}/`)) {
-      return branch.slice(prefix.length + 1);
-    }
-  }
-  return null;
-}
 
 /** Renders one `Task::Phase::State <ref>::<phase>::<state>` line (LLD
  * §3.9.1/§3.8.1) — empty ref and null phase display as `-`. */
@@ -89,6 +78,36 @@ export async function status(
     taskStatus = await resolveReady(tools, taskStatus);
   }
 
+  // --fix (MAG-46-18, LLD §3.9): on a branch mismatch, switch to the
+  // canonical branch — optionally committing WIP first when --wip is also
+  // given and the worktree is dirty. A no-op when the current branch
+  // already is the canonical branch (fixed: false, nothing checked out).
+  // The switch happens after the --check-refused guard so a refused
+  // invocation never silently acts on the working tree, and the reported
+  // taskStatus keeps the pre-switch derivation (the derivation's own
+  // currentBranch/branchMismatch record the mismatch --fix just resolved).
+  let fixed = false;
+  let fixedTarget: string | undefined;
+  if (args.fix !== undefined) {
+    // --fix is not applicable with `--ref` naming a task other than the
+    // checked-out one (LLD §3.9: there is no "current branch" of `<ref>`
+    // to fix/carry WIP on) — nothing is switched.
+    const fixApplicable = refArg === "" || checkedOutRef === ref;
+    if (fixApplicable) {
+      // `--fix [branch]`: an explicit branch overrides the derived
+      // canonical branch; bare `--fix` switches to the canonical one.
+      const target = typeof args.fix === "string" ? args.fix : taskStatus.canonicalBranch;
+      if (target !== null && currentBranch !== target) {
+        if (args.wip !== undefined && (await tools.git.isDirty())) {
+          await commitWipOnCurrentBranch(tools, args.wip, currentBranch);
+        }
+        await tools.git.checkout(target);
+        fixed = true;
+        fixedTarget = target;
+      }
+    }
+  }
+
   // A successfully-resolved `blocked` read is still a successful status
   // invocation (exit 0, §3.9) — it only carries the gate's own violation
   // message verbatim, not a reworded one (§3.3).
@@ -102,12 +121,13 @@ export async function status(
     messages: [
       `Current branch \`${currentBranch}\` - ref: ${ref}`,
       stateLine(ref, taskStatus.phase, taskStatus.state),
+      ...(fixedTarget !== undefined ? [`Switched to \`${fixedTarget}\``] : []),
     ],
     violation,
     taskStatus,
     checked: checkRequested && taskStatus.gate !== undefined,
     checkRefused: false,
-    fixed: false,
+    fixed,
   };
 }
 
