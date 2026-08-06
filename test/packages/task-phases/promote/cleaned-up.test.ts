@@ -7,17 +7,18 @@
  * Five behaviors under test, kept separate per §3.3–§3.6 (plus §2.1's
  * convergence requirement):
  *   1. `merged-pending-cleanup` (regular route) -> cleanup: checkout `main`,
- *      update local `main` to match `origin/main`, delete `spec/test/build`
- *      branches, NO confirmation required, `action: "cleaned-up"`,
- *      `branchesDeleted` contains all three, exit 0 (§3.3).
+ *      update local `main` to match `origin/main`, delete
+ *      `spec/test/build/ready` branches, NO confirmation required,
+ *      `action: "cleaned-up"`, `branchesDeleted` contains all four,
+ *      exit 0 (§3.3).
  *   2. §2.1 convergence: the interrupted-cleanup retrigger fixture (no PR
  *      found, a surviving branch already an ancestor of `main`) resolves to
  *      the SAME `cleaned-up` action and the same `branchesDeleted` as the
  *      ordinary route — one code path, not two that happen to look similar.
  *   3. Partially-already-deleted branches: `deleteBranch("test/{ref}")` is
  *      still called and tolerates "doesn't exist" as a no-op — cleanup
- *      succeeds with only some of spec/test/build surviving, `action` still
- *      `"cleaned-up"`, exit 0 (§3.4).
+ *      succeeds with only some of spec/test/build/ready surviving, `action`
+ *      still `"cleaned-up"`, exit 0 (§3.4).
  *   4. After cleanup the ref reports `not-initialised` again (§3.5 — a
  *      trailing side-effect verification of the cleanup, so it stays in this
  *      file rather than moving to the status file, per the test-file-layout
@@ -36,6 +37,15 @@
  * `deleteBranch`/`branchesDeleted` targets are unaffected — `build/{ref}`
  * remains the correct branch to actually delete, this only changes which
  * branch the merged-PR *lookup* checks.
+ *
+ * **Correction (architect fix, MAG-46 close-out, post-merge):** the
+ * regular-route `branchesToDelete` list predates the `build/{ref}` ->
+ * `ready/{ref}` rename and never picked up `ready/{ref}` itself — the Main
+ * Gate PR's actual (transient) head branch, left behind every single cycle
+ * and requiring a manual `git push origin --delete` each time (confirmed by
+ * dogfooding this exact command against MAG-46 itself across all 18 of its
+ * own chunks). `ready/{ref}` added to the regular-route branch set; the
+ * quick route is unaffected (it never creates a `ready/{ref}`).
  *
  * §2.1 contracts asserted explicitly:
  *   - `promote` consumes the shared `deriveRepoState()` pipeline — it never
@@ -318,11 +328,13 @@ afterEach(() => {
 });
 
 /** The regular route's full cleanup branch set — every phase branch the
- *  workflow ever created, in the order the §3.3 Then clause names them. */
+ *  workflow ever created, including the Main Gate PR's transient
+ *  `ready/{ref}` head (architect fix, MAG-46 close-out). */
 const REGULAR_ROUTE_BRANCHES = (ref: string): string[] => [
   `spec/${ref}`,
   `test/${ref}`,
   `build/${ref}`,
+  `ready/${ref}`,
 ];
 
 describe("promote: merged Main Gate PR merged — cleanup with no confirmation required (§3.3)", () => {
@@ -351,6 +363,7 @@ describe("promote: merged Main Gate PR merged — cleanup with no confirmation r
     expect(mocks.deleteBranch).toHaveBeenCalledWith("spec/AAA-123");
     expect(mocks.deleteBranch).toHaveBeenCalledWith("test/AAA-123");
     expect(mocks.deleteBranch).toHaveBeenCalledWith("build/AAA-123");
+    expect(mocks.deleteBranch).toHaveBeenCalledWith("ready/AAA-123");
     const deleteOrder = mocks.deleteBranch.mock.invocationCallOrder[0];
     expect(deleteOrder).toBeGreaterThan(updateOrder);
 
@@ -401,6 +414,7 @@ describe("promote: interrupted-cleanup retrigger converges on the identical clea
     expect(mocks.deleteBranch).toHaveBeenCalledWith("spec/AAA-125");
     expect(mocks.deleteBranch).toHaveBeenCalledWith("test/AAA-125");
     expect(mocks.deleteBranch).toHaveBeenCalledWith("build/AAA-125");
+    expect(mocks.deleteBranch).toHaveBeenCalledWith("ready/AAA-125");
 
     expect(doc.result.action).toBe("cleaned-up");
     expect(doc.result.branchesDeleted).toEqual(REGULAR_ROUTE_BRANCHES("AAA-125"));
@@ -425,6 +439,7 @@ describe("promote: cleanup tolerates partially-already-deleted branches (§3.4)"
     expect(mocks.deleteBranch).toHaveBeenCalledWith("spec/AAA-124");
     expect(mocks.deleteBranch).toHaveBeenCalledWith("test/AAA-124");
     expect(mocks.deleteBranch).toHaveBeenCalledWith("build/AAA-124");
+    expect(mocks.deleteBranch).toHaveBeenCalledWith("ready/AAA-124");
 
     expect(mocks.checkout).toHaveBeenCalledWith("main");
     expect(mocks.pullFastForward).toHaveBeenCalledWith("main");

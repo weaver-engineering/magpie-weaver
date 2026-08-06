@@ -375,7 +375,7 @@ export async function promote(
   }
 
   // The merged-pending-cleanup resolution (spec 15): the Main Gate PR
-  // (`main` <- `build/{ref}` regular route, `main` <- `task/{ref}` quick
+  // (`main` <- `ready/{ref}` regular route, `main` <- `task/{ref}` quick
   // route) is confirmed merged and local `main` hasn't caught up yet — or
   // an interrupted prior cleanup left a surviving branch already an
   // ancestor of local `main` (the §3.2 retrigger, which converges on this
@@ -388,6 +388,12 @@ export async function promote(
   // `deleteBranch`, which tolerates an already-absent branch as a no-op
   // (§3.4 — the re-run of a partially-finished cleanup). Afterward the ref
   // reports `not-initialised` again (§3.5).
+  //
+  // Regular-route cleanup includes `ready/{ref}` (MAG-46, post-close-out
+  // fix): the branch list here predates the `build/{ref}` -> `main/{ref}`
+  // -> `ready/{ref}` rename (`task-MAG-40.md`) — `ready/{ref}` is the
+  // Main Gate PR's actual head, transient by design, and was never being
+  // deleted, requiring a manual `git push origin --delete` every cycle.
   if (taskStatus.state === "merged-pending-cleanup") {
     if (await tools.git.isDirty()) {
       // The worktree is the one thing cleanup cannot proceed past: the
@@ -406,7 +412,7 @@ export async function promote(
     const branchesToDelete =
       taskStatus.phase === "quick"
         ? [`task/${ref}`]
-        : [`spec/${ref}`, `test/${ref}`, `build/${ref}`];
+        : [`spec/${ref}`, `test/${ref}`, `build/${ref}`, `ready/${ref}`];
     await tools.git.checkout("main");
     await tools.git.pullFastForward("main");
     for (const branch of branchesToDelete) {
