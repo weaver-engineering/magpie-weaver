@@ -85,6 +85,7 @@ permission:
     "gh api repos/weaver-engineering/magpie-weaver/collaborators/*/permission*": allow
     "gh api -X POST repos/weaver-engineering/magpie-weaver/pulls/*/requested_reviewers*": allow
     "pnpm gate-check*": allow
+    "pnpm task*": allow
     "pnpm test*": allow
     "pnpm --filter*": allow
     "pnpm -r build*": allow
@@ -305,6 +306,13 @@ Raise the PR yourself once the gate passes and the change is complete:
 ```bash
 gh pr create --base main --head task/{ref} --title "{ref}: <description>" --body "<what changed and why>"
 ```
+
+**Never run `gh pr merge`, on any PR, for any reason — including a
+disposable e2e-verification fixture PR you raised yourself.** Merging is
+a human-only action, no exceptions. If a PR you raised (the real one, or
+a throwaway fixture) needs to be merged before you can continue, say so
+in your response and stop — do not attempt the merge, and do not queue
+up a `gh pr merge` call expecting it to be approved.
 
 Before writing your final report, call the `session-info` tool and use the
 `sessionId` it returns. Never invent a session ID or copy the placeholder

@@ -1015,6 +1015,30 @@ flag; an unforced, non-recursive `rm <file>` on scratch files matches
 neither. Strictly less capable than what's already unconditionally
 allowed (`rm -rf*`), so no new risk. Added `"rm *"` to all three agents.
 
+## 3bh. `"pnpm task*"` was missing entirely
+
+`build-implementer`, re-verifying the spec-15 regular-route Main Gate
+fix, ran `pnpm task status --help` — real usage of the CLI this task
+(`task-phases`) is actually building, distinct from the already-allowed
+`pnpm gate-check*`/`pnpm test*`/`pnpm build*`/etc, none of which match
+invoking `task` itself. Same read-only/informational class as `--help`
+generally. Added `"pnpm task*"` to all three agents.
+
+## 3bi. Standing instruction added: never run `gh pr merge`
+
+`build-implementer`, re-verifying the spec-15 regular-route Main Gate
+fix a second time, attempted `gh pr merge` on its own disposable
+e2e-verification fixture PR — twice in the same session, despite an
+explicit ad-hoc correction after the first attempt. `gh pr merge` was
+never allow-listed (the permission system correctly asked both times,
+and the user correctly denied both), but nothing in any agent's own
+standing instructions actually said not to attempt it — the only
+defense was the human catching and denying it live, every time. Added
+an explicit rule to all three agents' "Ending The Session" section,
+right next to their own `gh pr create` example: never run `gh pr merge`,
+on any PR, for any reason, including a fixture PR raised for
+verification purposes — report that a human merge is needed and stop.
+
 ## 5. Acceptance criteria
 
 - Three sub-agent config files exist under `.opencode/agent/`, each with
