@@ -91,6 +91,7 @@ permission:
     "pnpm task*": allow
     "pnpm test*": allow
     "pnpm --filter*": allow
+    "pnpm --dir*": allow
     "pnpm install*": allow
     "pnpm exec eslint*": allow
     "pnpm exec vitest*": allow

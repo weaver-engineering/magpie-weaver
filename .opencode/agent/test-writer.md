@@ -83,6 +83,7 @@ permission:
     "pnpm task*": allow
     "pnpm test*": allow
     "pnpm --filter*": allow
+    "pnpm --dir*": allow
     "pnpm -r build*": allow
     "pnpm build*": allow
     "pnpm install*": allow
