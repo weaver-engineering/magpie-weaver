@@ -535,6 +535,30 @@ all real since spec 04), no existing-test contradiction (`list.ts` is an
 untested placeholder stub today). No open questions remain in the
 working spec doc.
 
+**One real gap found and closed once the test phase actually started —
+the pre-handoff review's "no stub dependencies" check was true but
+incomplete.** `test-writer`, working through the spec, correctly noticed
+the LLD §3.10's "list all branches in the repo" pseudocode has no
+corresponding `GitTool` method — every method that existed before this
+chunk takes a specific branch/ref name; nothing enumerates. The
+pre-sequencing review checked that spec 16's *already-named* deps
+(`deriveRepoState`/`branchExists`/`currentBranch`) were real, not
+whether the spec's own enumeration step had a primitive to call at
+all — the same class of miss as spec 14's interactive-stdin gap, just
+not caught ahead of time this round. `test-writer` reasoned through
+several possible mechanisms exhaustively before flagging it rather than
+guessing at one.
+
+Closed the same way as spec 14's gap: added `GitTool.listBranches():
+Promise<string[]>` (LLD §4.8) — every local branch plus every
+remote-tracking branch in short form, one call, letting the caller
+strip prefixes and group both forms of the same branch under one
+`{ref}`. Same treatment as spec 11's `createRemoteBranch` addition: new
+interface surface landing with the chunk that needs it, not a stub
+being resolved. Corrected in place in the LLD and the working spec doc
+(`spec/MAG-46`'s spec commit amended, not yet merged so no
+already-merged-commit precedent needed this time).
+
 ## Previous scope: spec 15 (done)
 
 **Working spec doc:**
