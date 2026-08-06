@@ -467,6 +467,56 @@ future scheduler needs the same required-behavior-vs-merged-test diff as
 a standing check, not just something the architect currently does by
 hand.
 
+## Pre-sequencing review: specs 16–18
+
+Reviewed the three remaining backlog specs (16: `list` aggregates every
+active ref; 17: `<ref>` switches to another task's canonical branch; 18:
+remaining `init`/`status`/`ref` flag variants) together, ahead of spec 15
+finishing, same methodology as the specs 12–15 batch review.
+
+**Sequencing: no functional dependency among the three.** Each is
+independent — `list` enumerates every ref via `deriveRepoState()`, `ref`
+switches one ref via the same derivation plus already-proven `checkout`/
+`commitAll`, and 18's flag variants extend `init`/`status` independently
+of both. Numeric order is narrative only, not necessity — any of the
+three could build first without blocking the others.
+
+**Deps/shim-dependency check: all three clean.** Nothing they touch is a
+stub: `deriveRepoState`, `branchExists`, `currentBranch` (16); `checkout`,
+`commitAll`, the existing `TASK_REF_PATTERN` ref-matching regex (17);
+`fileSystem.copyFile`/`exists`/`loadConfig`, `git.checkout`/`commitAll`/
+`createBranch` (18) — all real since specs 01/02/04/07.
+
+**Test-file-layout check:** all three specs' "Test file" headers match
+the layout doc's own table exactly (`list/active-tasks.test.ts`,
+`task/switch.test.ts`, 18's `init/flag-variants.test.ts`/
+`status/fix.test.ts` split) — no repeat of the 11.01 §3.4 mismatch.
+
+**Existing-test contradiction check — clean this time, no repeat of the
+12–15 batch's `defers-when-gate-pr-exists.test.ts` situation.**
+`commands/list.ts` and `commands/task.ts`'s `ref` are both untested
+placeholder stubs today (`throw new Error("not implemented")`, no
+existing test references either) — spec 16/17 build on genuinely open
+ground, nothing to retire. `status.ts` has no `--fix` handling of any
+kind yet (grepped for `fix` — no hits), so spec 18's §3.6/§3.7 addition
+is purely new surface, not a change to existing behavior.
+
+One case verified explicitly rather than taken on the spec doc's own
+word, given how the 12–15 batch's real gap was missed by trusting a
+similar-sounding claim: spec 18 §3.3 (`init --wip` carries forward
+pre-existing WIP instead of blocking) explicitly contrasts itself
+against `MAG-46-05 §3.3` (`init/create.test.ts`'s existing "refuses
+outright when there is work in progress and no `--wip`" case). Checked
+`init.ts` directly — the current block is unconditional
+(`if (dirty) { refuse(...) }`, no `--wip` flag read anywhere yet), so
+the existing test's Given (dirty, no `--wip` given) still correctly hits
+the refusal under the new code too, once it's changed to
+`if (dirty && !args.wip)`. Additive, not contradictory — confirmed, not
+assumed.
+
+No design or interface gaps found needing resolution ahead of time
+(no repeat of spec 14's interactive-stdin gap).
+
 ## Current Scope: spec 15
 
 **Working spec doc:**
