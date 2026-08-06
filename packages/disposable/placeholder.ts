@@ -1,1 +1,1 @@
-export const disposable = true;
+// disposable fixture placeholder
