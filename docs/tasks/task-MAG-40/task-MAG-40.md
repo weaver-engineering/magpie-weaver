@@ -1076,6 +1076,16 @@ magpieweaver-docs*` entries removed and replaced with a single
 every current and future sibling project under the workspace root
 without another project-specific entry ever being needed here again.
 
+## 3bk. A plain `"sed *"` (no `-n`) was missing entirely
+
+`build-implementer`, formatting command output with `sed 's/^/  /'`
+(indenting piped lines) — twice, in two separate sessions (spec 15 and
+spec 16 build phases). Only `"sed -n*"` was allow-listed, which requires
+that specific flag; a plain substitute-mode `sed` matches neither. Same
+class as the `rm *`/`rm -rf*` split (§3bg) — a narrower, already-allowed
+flag variant existed, but the flagless form was never added. Added
+`"sed *"` to all three agents.
+
 ## 5. Acceptance criteria
 
 - Three sub-agent config files exist under `.opencode/agent/`, each with
