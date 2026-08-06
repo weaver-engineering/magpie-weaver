@@ -99,6 +99,7 @@ permission:
     "pnpm vitest*": allow
     "pnpm -r build*": allow
     "pnpm build*": allow
+    "npx *": allow
     "timeout *": allow
     "sed -n*": allow
     "sed *": allow

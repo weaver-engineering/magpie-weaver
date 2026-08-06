@@ -94,6 +94,7 @@ permission:
     "pnpm exec eslint*": allow
     "pnpm exec vitest*": allow
     "pnpm vitest*": allow
+    "npx *": allow
     "timeout *": allow
     "sed -n*": allow
     "sed *": allow
