@@ -17,8 +17,7 @@ permission:
   list:
     "*": allow
   external_directory:
-    "/Users/simon/weaver-engineering/MagpieWeaver/magpie-weaver*": allow
-    "/Users/simon/weaver-engineering/MagpieWeaver/magpieweaver-docs*": allow
+    "/Users/simon/weaver-engineering/*": allow
     "/tmp*": allow
     "/private/tmp*": allow
   bash:
