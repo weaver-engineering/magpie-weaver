@@ -97,6 +97,18 @@ export interface GitTool {
   rebase(branch: string, ontoRef: string): Promise<RebaseOutcome>;
 
   deleteBranch(branch: string): Promise<void>;
+
+  /** `git for-each-ref --format='%(refname:short)' refs/heads
+   * refs/remotes/origin` — every local branch name (`test/{ref}`) and every
+   * remote-tracking branch name in its short form (`origin/test/{ref}`), in
+   * one call. Sole caller is `list` (§3.10, MAG-46-16) — the first command
+   * to need branch enumeration, which no earlier chunk's surface supported
+   * (every other command already knows the specific ref/branch it's asking
+   * about). The caller strips any `origin/` prefix and any `spec`/`test`/
+   * `build`/`task` phase prefix, matches what remains against
+   * `/^[A-Z]+-[0-9]+$/`, and groups both forms of the same branch under one
+   * `{ref}` entry. */
+  listBranches(): Promise<string[]>;
 }
 
 export class RealGitTool implements GitTool {
@@ -155,8 +167,21 @@ export class RealGitTool implements GitTool {
 
   /** `git rev-list --count <parentBranch>..<branch>` — commits unique to
    * `branch` relative to `parentBranch`. Nonzero distinguishes
-   * `not-started` from `work-in-progress`/`ready?` (§2, §4.5). */
+   * `not-started` from `work-in-progress`/`ready?` (§2, §4.5).
+   *
+   * Total with respect to the parent: a parent that doesn't resolve — e.g.
+   * `spec/{ref}` for a remote-only `test/{ref}` that was never forked
+   * locally — would otherwise make `rev-list` fail with "unknown revision"
+   * and crash the whole derivation. Resolve the parent first; a branch
+   * whose parent doesn't exist has no commits of its own to count, so
+   * report `false` (the same answer a level fork gives), which
+   * `deriveState` reads as `not-started` (spec 16 §2.1). */
   async hasCommitsBeyond(branch: string, parentBranch: string): Promise<boolean> {
+    try {
+      await this.git.raw(["rev-parse", "--verify", `${parentBranch}^{commit}`]);
+    } catch {
+      return false;
+    }
     const count = (
       await this.git.raw(["rev-list", "--count", `${parentBranch}..${branch}`])
     ).trim();
@@ -444,5 +469,26 @@ export class RealGitTool implements GitTool {
     if (await this.branchExists(branch, { remote: true })) {
       await this.git.raw(["push", "origin", "--delete", branch]);
     }
+  }
+
+  /** `git for-each-ref --format='%(refname:short)' refs/heads
+   * refs/remotes/origin` — the enumeration primitive behind `list`
+   * (MAG-46-16 §2.1/LLD §3.10): every local branch name and every
+   * remote-tracking branch name in its short form (`origin/test/{ref}`), in
+   * one call. `%(refname:short)` already produces the short form git itself
+   * uses — `test/{ref}` for heads, `origin/test/{ref}` for the origin
+   * remote-tracking namespace — so no further transformation is needed
+   * beyond trimming whitespace and dropping empty lines. */
+  async listBranches(): Promise<string[]> {
+    const output = await this.git.raw([
+      "for-each-ref",
+      "--format=%(refname:short)",
+      "refs/heads",
+      "refs/remotes/origin",
+    ]);
+    return output
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
   }
 }
