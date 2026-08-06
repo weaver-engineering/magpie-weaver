@@ -517,12 +517,35 @@ assumed.
 No design or interface gaps found needing resolution ahead of time
 (no repeat of spec 14's interactive-stdin gap).
 
-## Current Scope: spec 17
+## Current Scope: spec 18 (final chunk)
 
-**Working spec doc:** `task-MAG-46-17-switch-spec.md` (copied alongside
-this file). `pnpm task <ref> [--wip [title] [message]] [--json]` derives
-`<ref>`'s current canonical branch via `deriveRepoState()` and checks it
-out, optionally committing WIP on the branch being left first.
+**Working spec doc:** `task-MAG-46-18-init-status-ref-flag-variants-spec.md`
+(copied alongside this file). The remaining documented `init`/`status`/
+`<ref>` flag variants earlier chunks deliberately deferred: `init --doc`/
+`--specs`/`--wip` (carry-forward), graceful degradation on a missing
+`.task-phases.json`, and `status --fix`.
+
+**Pre-handoff spec review:** no functional dependency beyond this chunk
+(the last one), no stub dependencies — `fileSystem.copyFile`/`exists`/
+`loadConfig` and `lib/task-doc.ts`'s `scaffoldTaskDoc()` all real,
+confirmed directly against `deps/fs.ts`/`lib/task-doc.ts` rather than
+taken on the spec's own word. No existing-test contradiction: `init.ts`
+reads `args.doc` only for the `--title`/`--doc` presence check today (no
+copy-instead-of-template path, no `--specs`, no WIP-carry-forward yet —
+explicitly flagged in its own doc comment as landing with MAG-46-18);
+`status.ts` hardcodes `fixed: false` on every return path, no `--fix`
+logic of any kind. Target test files (`init/flag-variants.test.ts`,
+`status/fix.test.ts`) don't exist yet. `InitCommandResult.specDocPaths`/
+`wipCarriedForward` and `StatusCommandResult.fixed` already exist in
+`types.ts`, matching the spec's required fields exactly. No open
+questions remain in the working spec doc.
+
+## Previous scope: spec 17 (done)
+
+**Working spec doc:** `task-MAG-46-17-switch-spec.md`. `pnpm task <ref>
+[--wip [title] [message]] [--json]` derives `<ref>`'s current canonical
+branch via `deriveRepoState()` and checks it out, optionally committing
+WIP on the branch being left first.
 
 **Pre-handoff spec review:** no functional dependency on 18, no stub
 dependencies — `deriveRepoState` (real since spec 04), `checkout`/
@@ -563,6 +586,64 @@ Left as found for whenever MAG-46-13/14's deferred concern gets picked
 up for real — fixing the `derivePrState` crash properly would also want
 a test fixture that models a *reused* ref, which no existing fixture
 does (every one uses a fresh, once-only `AAA-123`-style ref).
+
+**Spec commit needed one amend** — the initial `spec/MAG-46` commit
+landed with an empty message body, which `validate-spec-commit` rejects.
+Test-writer correctly identified this as architect-owned and stopped
+(`needs-architect-intervention`) rather than working around it; amended
+in place and rebased `test/{ref}` onto the corrected commit before
+handing back.
+
+**Test phase done** — merged via
+[PR #146](https://github.com/weaver-engineering/magpie-weaver/pull/146)
+(`test/MAG-46` → `build/MAG-46`). Architect review found no defects: all
+5 required behaviors covered one test each, fail-then-pass independently
+re-run (3 fail / 2 pass, matching the doc comment's own claim exactly),
+full suite re-run clean, and the test's assertions spot-checked against
+real code (`RefCommandResult`'s shape, the `"Unknown command"` wording,
+the `TASK_REF_PATTERN` regex) rather than taken on faith.
+
+**Build phase done, no defects found** — merged via
+[PR #148](https://github.com/weaver-engineering/magpie-weaver/pull/148).
+main-gate passed (139 tests, 95% new-line coverage). Architect review
+combined a code read with real e2e verification against a disposable
+bare-origin-plus-clone fixture (three genuine git scenarios: a clean
+switch, `--wip` committing on the branch being *left* before switching,
+and a real unmocked checkout conflict correctly surfaced without losing
+the uncommitted change) — the same discipline as every prior build PR,
+not just trusting a green gate-check.
+
+**Process incident, worth recording for the loom-service research
+([[project_loom_service_vision]]):** mid-session, the architect (running
+concurrently in the same `agent_1` worktree test-writer was using, to
+prep an unrelated permission-config fix) switched that shared worktree's
+branch right as test-writer ran `git add -A && git commit`, landing its
+test commit on the wrong branch (`task/MAG-40`, parented off `main`
+instead of `spec/MAG-46`). No work was lost — cherry-picked/rebased back
+onto `test/MAG-46` once diagnosed — but it's a concrete argument for
+never running architect git operations in a worktree an agent session
+might still be using; from this point on, architect-side work uses the
+dedicated `architect` worktree exclusively.
+
+**Two standing-permission gaps closed along the way**, both hit live by
+an agent and both now standing rules for all three agents (not one-off
+approvals): `pnpm --dir <pkg> exec ...`
+([PR #145](https://github.com/weaver-engineering/magpie-weaver/pull/145))
+and bare `npx *`
+([PR #147](https://github.com/weaver-engineering/magpie-weaver/pull/147)).
+
+**One transient GitHub-side incident** — PR #144's (task-doc) `MainGate`
+check got wedged in a stale `queued` state with self-contradicting API
+responses (`run view` said queued, `run cancel` said already completed,
+`rerun` said already running); traced to a genuine GitHub Actions partial
+outage (confirmed via githubstatus.com), not a config or process issue.
+Resolved itself once the outage cleared.
+
+`spec/MAG-46`/`test/MAG-46`/`build/MAG-46` cleared down via `pnpm task
+promote` once PR #148 merged, confirming the clear-down-per-cycle
+practice for a seventh cycle in a row. The stale `ready/MAG-46` (content
+already merged, not part of `promote`'s own cleanup list) deleted
+separately, same as every prior cycle.
 
 ## Previous scope: spec 16 (done)
 
