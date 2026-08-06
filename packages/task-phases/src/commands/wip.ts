@@ -1,21 +1,9 @@
 import type { ExternalTools, WipCommandResult } from "../types.js";
-
-/** The four phase-branch prefixes a ref can be checked out on — used to
- * derive the ref that prefixes the WIP title below. Same derivation as
- * `status.ts`'s own copy; kept local to this command. */
-const PHASE_PREFIXES = ["spec", "test", "build", "task"] as const;
-
-/** Derives a task ref from the checked-out branch name — `task/AAA-123` ->
- * `AAA-123`. Returns `null` when the branch is not a phase branch (e.g.
- * `main`); no attempt is made to derive a ref from `main` itself. */
-function deriveRefFromBranch(branch: string): string | null {
-  for (const prefix of PHASE_PREFIXES) {
-    if (branch.startsWith(`${prefix}/`)) {
-      return branch.slice(prefix.length + 1);
-    }
-  }
-  return null;
-}
+import {
+  WIP_DEFAULT_MESSAGE,
+  deriveRefFromBranch,
+  wipCommitTitle,
+} from "../lib/wip-commit.js";
 
 /** `pnpm task wip [title] [message]` — see task-phasing-lld.md §3.12.
  * Commits everything on the current branch with the `{ref}: {title} - WIP`
@@ -61,10 +49,10 @@ export async function wip(
 
   // The literal `{ref}: {title} - WIP` format is exact (§2.1); with no
   // title the title segment is omitted entirely (`{ref}: - WIP`), and the
-  // message falls back to the documented "work in progress".
-  const titleSegment = title !== undefined ? `${title} ` : "";
-  const commitTitle = `${ref}: ${titleSegment}- WIP`;
-  const commitMessage = message ?? "work in progress";
+  // message falls back to the documented "work in progress" — shared with
+  // `init --wip`/`status --fix --wip` via `lib/wip-commit.ts`.
+  const commitTitle = wipCommitTitle(ref, title);
+  const commitMessage = message ?? WIP_DEFAULT_MESSAGE;
 
   // changedFiles must be captured before commitAll: commitAll stages and
   // commits everything, after which the working tree is clean.
