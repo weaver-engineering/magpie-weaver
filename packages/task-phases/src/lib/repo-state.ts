@@ -102,22 +102,54 @@ async function derivePrState(
               state: "merged-pending-pull",
             };
           }
-          if (
-            (await tools.git.headSha(canonicalBranch)) !==
-            (await tools.git.headSha(`origin/${canonicalBranch}`))
-          ) {
+          // MAG-49 correction: a plain headSha inequality can't distinguish
+          // "local trails origin" (needs a pull) from "local carries its own
+          // commit(s) beyond origin" (the build phase's ordinary ready?
+          // derivation, once build-implementer starts committing straight to
+          // build/{ref}) from "both sides have moved independently since a
+          // shared fork point" (genuine trunk drift). The original
+          // equality-only check misclassified the second case as
+          // merged-pending-pull permanently, which made `ready` unreachable
+          // for the build phase — see task-MAG-49.md §3 correction. The
+          // direction is resolved with two `isAncestor` calls, verified
+          // against real git (not mocks) for all three shapes.
+          const originRef = `origin/${canonicalBranch}`;
+          const originIsAncestorOfLocal = await tools.git.isAncestor(originRef, canonicalBranch);
+          if (!originIsAncestorOfLocal) {
+            const localIsAncestorOfOrigin = await tools.git.isAncestor(canonicalBranch, originRef);
+            if (localIsAncestorOfOrigin) {
+              // Local is a strict ancestor of origin: genuinely behind,
+              // nothing local to preserve — the existing plain/cascading
+              // pull resolution (spec 14) applies unchanged.
+              return {
+                ref,
+                phase: "build",
+                canonicalBranch,
+                currentBranch,
+                branchMismatch: currentBranch !== canonicalBranch,
+                state: "merged-pending-pull",
+              };
+            }
+            // Neither is an ancestor of the other: local carries its own
+            // commit(s) AND origin has independently advanced since the
+            // fork point — build-phase trunk drift, resolved via the same
+            // generic rebase-forward mechanism spec/quick already use.
+            const state = await deriveState(tools, "build", ref, canonicalBranch);
             return {
               ref,
               phase: "build",
               canonicalBranch,
               currentBranch,
               branchMismatch: currentBranch !== canonicalBranch,
-              state: "merged-pending-pull",
+              state,
+              rebase: { branch: canonicalBranch, onto: originRef },
             };
           }
-          // §3.3: local `build/{ref}` already caught up with origin — the
-          // merged PR no longer drives the state; fall through to MAG-46-06's
-          // ordinary state derivation applied to the build phase.
+          // Origin is an ancestor of local: local is caught up (§3.3,
+          // unchanged) or strictly ahead with its own new commit(s) (the
+          // build phase's ordinary not-started/ready?/work-in-progress
+          // derivation, MAG-49's own required behavior) — the merged PR no
+          // longer drives the state either way.
           const state = await deriveState(tools, "build", ref, canonicalBranch);
           return {
             ref,

@@ -71,6 +71,22 @@
  * to `new Error("not implemented")`. None of the six scenarios can
  * produce `action: "pulled"`/`"pulled-and-rebased"` — or a `"none"` that
  * names `--confirm-rebase` — yet.
+ *
+ * **Correction (architect fix, task/MAG-49 prerequisite):** `buildTools`'s
+ * `isAncestor` double was an unconditional `true`, which happened to be
+ * harmless only because `derivePrState`'s local-vs-origin comparison used
+ * to be a plain `headSha` inequality that never consulted it. MAG-49
+ * corrected that comparison to resolve direction via `isAncestor` (so that
+ * "local carries its own commit(s) beyond origin" — build-implementer's
+ * ordinary workflow once commits land straight on `build/{ref}` — no
+ * longer misroutes into this file's `merged-pending-pull` scenarios
+ * forever). An unconditional `true` here would now resolve
+ * `isAncestor(origin/build/{ref}, build/{ref})` as true and misroute every
+ * §3.2-§3.6 scenario into the ordinary ready? derivation instead of
+ * `merged-pending-pull`, so the double now only resolves true for the
+ * "local is an ancestor of origin" direction these scenarios actually
+ * intend (behind, per this file's own fixture-mirrors-status-test comment
+ * above). See task-MAG-49.md §3 correction for the full derivation.
  */
 
 // Implements: task-MAG-46-14-promote-pulled-and-rebase-spec.md
@@ -217,7 +233,18 @@ function buildTools(
     });
   const hasCommitsBeyond = vi.fn().mockResolvedValue(false);
   const headCommitTitle = vi.fn().mockResolvedValue("");
-  const isAncestor = vi.fn().mockResolvedValue(true);
+  // MAG-49 correction: the derivation resolves local-vs-origin direction via
+  // `isAncestor`, not a plain `headSha` comparison (see repo-state.ts). This
+  // fixture's local build/{ref} is meant to represent "behind origin" (per
+  // this file's own header comment) whenever it exists at all, so only
+  // isAncestor(build/{ref}, origin/build/{ref}) — local is an ancestor of
+  // origin — resolves true; the reverse direction (which would misroute
+  // this into the ordinary ready?/ahead derivation instead of
+  // merged-pending-pull) resolves false.
+  const isAncestor = vi.fn().mockImplementation(
+    (ancestor: string, descendant: string) =>
+      localBuildExists && ancestor === `build/${ref}` && descendant === `origin/build/${ref}`,
+  );
   const findMergedPR = vi.fn().mockImplementation((base: string, head: string) =>
     base === `build/${ref}` && head === `test/${ref}` ? mergedBuildGatePR() : null,
   );
