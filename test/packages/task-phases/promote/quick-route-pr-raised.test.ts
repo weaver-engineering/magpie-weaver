@@ -56,6 +56,12 @@
  * §3.3 no-op that re-states its number). None of the three scenarios can
  * produce `action: "pr-raised"` — or a "none" that re-states a Main Gate
  * PR — yet.
+ *
+ * **Correction (MAG-50):** §3.2's blocked case originally asserted exit 0 /
+ * `success: true`. Corrected: `promote`'s whole job is to promote — a
+ * `blocked` state means that did not happen, so it's a failed invocation
+ * (exit 1 / `success: false`) even though no systematic error occurred
+ * determining it. No git-action or violation-relay behavior changed.
  */
 
 // Implements: task-MAG-46-11-01-promote-quick-route-pr-raised-spec.md
@@ -341,10 +347,11 @@ describe("promote: quick::blocked performs no action (§3.2)", () => {
     // No git action and no PR were performed.
     expect(mocks.createPR).not.toHaveBeenCalled();
 
-    // A successfully-determined blocked result: action none, exit 0.
+    // MAG-50: blocked means promote did not do what was asked - action
+    // none, exit 1, success false (was exit 0 / success true).
     expect(doc.result.action).toBe("none");
-    expect(code).toBe(0);
-    expect(doc.result.success).toBe(true);
+    expect(code).toBe(1);
+    expect(doc.result.success).toBe(false);
 
     // The gate's own violation text is surfaced directly, not reworded.
     expect(doc.result.violation).toBe("task doc missing");

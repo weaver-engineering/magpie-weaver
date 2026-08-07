@@ -79,6 +79,13 @@
  * and already work for `build` (the drift detection itself landed as the
  * task/MAG-49 prerequisite, PR #155) — they pass unmodified both before
  * and after, which is exactly the spec's stated intent for them.
+ *
+ * **Correction (MAG-50):** §3.3's blocked case originally asserted exit 0 /
+ * `success: true` (mirroring the — now corrected — generic blocked-relay
+ * branch this test only regression-confirms, not implements). Corrected
+ * to exit 1 / `success: false`: `promote`'s job is to promote, and a
+ * `blocked` state means that did not happen. No git-action or
+ * violation-relay behavior changed.
  */
 
 // Implements: task-MAG-49-01-spec.md
@@ -474,7 +481,7 @@ describe("promote: the starting branch is restored after raising the PR (§3.2)"
 });
 
 describe("promote: a blocked build-phase gate result is relayed, not swallowed (§3.3)", () => {
-  it("takes no git action and relays main-gate's own violation verbatim, exit 0", async () => {
+  it("takes no git action and relays main-gate's own violation verbatim, exit 1 (MAG-50)", async () => {
     const { tools, mocks } = buildTools({
       gateRun: gateRun({
         passed: false,
@@ -504,10 +511,11 @@ describe("promote: a blocked build-phase gate result is relayed, not swallowed (
     expect(mocks.createPR).not.toHaveBeenCalled();
     expect(mocks.deleteBranch).not.toHaveBeenCalled();
 
-    // A successfully-determined blocked result: action none, exit 0.
+    // MAG-50: blocked means promote did not do what was asked - action
+    // none, exit 1, success false (was exit 0 / success true).
     expect(doc.result.action).toBe("none");
-    expect(code).toBe(0);
-    expect(doc.result.success).toBe(true);
+    expect(code).toBe(1);
+    expect(doc.result.success).toBe(false);
 
     // The gate's own violation text is surfaced directly, not reworded.
     expect(doc.result.violation).toBe("build commit does not exist");

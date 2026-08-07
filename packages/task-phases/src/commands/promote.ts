@@ -600,12 +600,16 @@ export async function promote(
     };
   }
 
-  // A successfully-determined `blocked` result is a successful invocation
-  // (exit 0): no git action, and the gate's own violation text relayed
-  // verbatim, not reworded (§3.3).
+  // MAG-50 correction: a `blocked` result means promote's one job — actually
+  // promoting — did not happen. No git mutation occurs, and the gate's own
+  // violation text is relayed verbatim, not reworded (§3.3), but this is a
+  // failed invocation (exit 1), not a successful one: the caller asked to
+  // promote and promote did not, even though no systematic error occurred
+  // determining that. (Was previously `success: true` / exit 0 — see the
+  // MAG-50 task in Linear.)
   if (taskStatus.state === "blocked" && taskStatus.gate?.result) {
     return {
-      success: true,
+      success: false,
       action: "none",
       messages: [
         `Current branch \`${currentBranch}\` - ref: ${ref}`,
