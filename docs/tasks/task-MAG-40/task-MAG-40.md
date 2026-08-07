@@ -1086,6 +1086,101 @@ class as the `rm *`/`rm -rf*` split (§3bg) — a narrower, already-allowed
 flag variant existed, but the flagless form was never added. Added
 `"sed *"` to all three agents.
 
+## 3bl. `"pnpm --dir <pkg> exec ..."` was missing entirely
+
+`test-writer`, checking a single new test file's fail-then-pass state via
+`pnpm --dir packages/task-phases exec vitest run task/switch.test.ts`,
+hit `ask` — the `--dir` flag comes before `exec`, so this command shape
+matched neither the standing `"pnpm exec vitest*"` nor `"pnpm --filter*"`
+rule. Added `"pnpm --dir*"` to all three agents.
+
+## 3bm. A bare `"npx *"` was missing entirely
+
+`build-implementer`, running a targeted coverage check via `npx vitest
+run --coverage --coverage.include='packages/task-phases/src/commands/
+task.ts'`, hit `ask` — `npx` is a different command entirely from every
+standing `pnpm*`/`vitest*` rule. Added `"npx *"` to all three agents.
+
+## 3bn. `gate-check`/`task` custom tools ran `pnpm` against the wrong
+working directory — a real bug, not a permission gap
+
+Both `.opencode/tool/gate-check.ts` (§3b) and `.opencode/tool/task.ts`
+called `execFile("pnpm", [...])` with no `cwd` option, so Node defaulted
+to the **OpenCode server process's own** working directory — wherever
+`opencode serve` was launched from (the main detached-HEAD checkout) —
+regardless of which session or worktree actually invoked the tool. Every
+`gate-check`/`task` call silently ran against the wrong checkout, for
+every agent, in every session, since these tools existed.
+
+Not caught by any one session — caught because the user noticed the
+same message recurring across many independent sessions ("Confirmed —
+the gate-check tool runs in the detached main checkout, not my worktree.
+That's an environment quirk; the CLI is correct when run from my
+worktree.") and asked why, rather than accepting it as environmental.
+Agents had been quietly working around this for as long as the tools
+existed.
+
+The plugin SDK's own `ToolContext` type documents the fix directly on
+the field itself: `directory: string` — "Current project directory for
+this session. Prefer this over `process.cwd()` when resolving relative
+paths." Neither tool accepted the second `context` parameter at all;
+`session-info.ts` (§3c) already used `context.sessionID` correctly,
+which is what made the gap visible once compared side by side. Fixed in
+[PR #151](https://github.com/weaver-engineering/magpie-weaver/pull/151) —
+both tools now accept `context` and pass `{ cwd: context.directory }` to
+`execFile`.
+
+## 3bo. Final maturity milestone: standing instructions rebuilt on
+`task`, not raw `git`
+
+Once MAG-46 shipped `pnpm task`'s full command set (specs 16–18: `list`,
+`promote`'s remaining actions, `status --fix`, `init`'s flag variants)
+and §3bn's tool-cwd fix landed — without which none of this would have
+been reliable — the three agents' "Session Start Protocol" (§2 in each)
+was rewritten to derive and act on phase/state via the `task` tool
+instead of a hand-rolled raw-`git` sequence duplicating logic the
+product itself now owns. This closes the loop §3b/§3bh opened: the
+`gate-check` and `task` tools existed from this task's very first scope,
+but `task` stayed unusable for real derivation until the underlying CLI
+matured — the whole reason every agent's §1 carried a "do not use it to
+derive phase/state yet" caveat until tonight.
+
+`test-writer` and `quick-scaffolder` convert fully — every raw `git`
+step in their old protocols now has a `task` equivalent.
+`build-implementer` converts everything except the `ready/{ref}`-specific
+branch mechanics (§3aq): the derivation pipeline was never built to
+model `ready/{ref}` at all (it's a manual convention layered on top of
+the tool's four real phases — `spec`/`test`/`build`/`quick` — not a
+phase itself), so those steps stay raw `git`, explicitly marked as such
+in the doc rather than silently left inconsistent with the other two.
+
+## 3bp. `"cut *"` was missing entirely
+
+Caught live in the architect's own tuning session, watching `test-writer`
+diagnose a `validate-spec-commit` gate failure on MAG-49: a compound
+command chaining `git ls-remote`, `git rev-parse`, and a `for`-loop over
+`git rev-list`/`git cat-file`/`sed`/`tr` ending in `cut -c1-9` (to
+shorten a commit SHA for display) hit an `ask`, even though every other
+command in the pipeline was already allowed. `cut` is a plain, read-only,
+single-word text utility — same missing-utility class as `tr`/`awk`
+(§3ah/§3aj) and `head`/`tail`/`grep`/`wc`/`cat` before them: a command
+that composes safely with an already-allowed set but was never granted
+itself. Added `"cut *": allow` to all three agents.
+
+## 3bq. `"pnpm exec gate-check*"` was missing entirely
+
+Caught live in a second concurrent tuning session, watching
+`build-implementer` (agent_1, MAG-49 build phase) debug a `branch-ref`
+gate-check discrepancy by running the real CLI directly — `pnpm exec
+gate-check branch-ref --json` — to compare against the `gate-check`
+OpenCode tool's own output. Only the pnpm-script form, `"pnpm
+gate-check*"`, was allowed; the `pnpm exec <bin>` invocation of the same
+already-trusted command was not — the same distinct-literal-prefix gap
+as §3ai (`"pnpm vitest*"` vs `"pnpm exec vitest*"`), just the reverse
+direction, and inconsistent with `build-implementer` already having
+`"pnpm exec task*"` for the sibling `task` CLI. Added `"pnpm exec
+gate-check*": allow` to all three agents.
+
 ## 5. Acceptance criteria
 
 - Three sub-agent config files exist under `.opencode/agent/`, each with
@@ -1101,8 +1196,22 @@ flag variant existed, but the flagless form was never added. Added
   `build-gate` / `main-gate` checks in `packages/gate-checks`, and — per
   §3b — actually returns a valid result for a pass, a fail, and a
   malformed invocation, verified against the real CLI.
-- No `task-phases` tool file is added, since no backing CLI exists yet.
+- `.opencode/tool/task.ts` was added once a backing CLI existed to wrap
+  (it didn't at this task's original scope) and, per §3bn, correctly
+  scopes its `pnpm task` calls to `context.directory` rather than the
+  OpenCode server's own working directory.
 
 ## 6. Notes for the agent
 
-- None.
+**Closed out.** §3a–§3bq record every real-world gap this task's
+permission/tooling model hit, in the order agents actually hit them,
+from the very first session through MAG-46's own completion, plus two
+more small gaps (§3bp, §3bq) caught while this closing PR was still
+open for review. §3bo is the natural stopping point: the three agents'
+standing instructions now
+derive and act on phase/state via `pnpm task` itself rather than
+duplicating its logic in raw `git`, which was always where this task was
+heading — a config/tooling layer thin enough that the product it wraps
+does the real work. Any future gap in this area is a new, small task
+against the *current* state of `.opencode/`, not a continuation of this
+one.

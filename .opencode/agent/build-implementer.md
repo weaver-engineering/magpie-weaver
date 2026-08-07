@@ -88,6 +88,7 @@ permission:
     "gh api -X POST repos/weaver-engineering/magpie-weaver/pulls/*/requested_reviewers*": allow
     "gh api repos/weaver-engineering/magpie-weaver/branches/*/protection*": allow
     "pnpm gate-check*": allow
+    "pnpm exec gate-check*": allow
     "pnpm task*": allow
     "pnpm test*": allow
     "pnpm --filter*": allow
@@ -119,6 +120,7 @@ permission:
     "sort *": allow
     "mktemp *": allow
     "tr *": allow
+    "cut *": allow
     "cat *": allow
     "diff *": allow
     "echo *": allow
@@ -156,15 +158,17 @@ session and to review your work before it merges.
 The `gate-check` tool (§4) wraps `pnpm gate-check` and is preferable to
 shelling out to it directly.
 
-A second tool, `task`, wraps `pnpm task <command> [...args]` — but **do
-not use it to derive phase/state yet.** `task status` defers with "not
-implemented" for any ref that already has a merged gate PR, which is
-always true in the build phase (the Build Gate PR has merged by
-definition), so it cannot answer for the task you are working on. It
-becomes usable from MAG-46-16 onward, once the merged-PR states land.
-Until then use the raw `git` checks in §2. `list`/`promote`/`ref` are
-unimplemented placeholders — check the task doc's "Current Scope"
-section for what's actually landed.
+A second tool, `task`, wraps `pnpm task <command> [...args]` — **this is
+now the primary way to check and act on `build/{ref}`'s own state**
+(MAG-46 shipped all 18 chunks; `status`/`init`/`list`/`promote`/`wip`/
+`<ref>` are all real, fully-flagged implementations, not placeholders).
+§2 below is built on it as far as it goes — but the derivation pipeline
+only models `spec`/`test`/`build`/`quick` phases; it has **no concept of
+`ready/{ref}`** at all. That branch is a manual convention layered on
+top of the tool (`build/{ref}` is branch-protected, so your own commit
+can't live there) and was never given its own `task` support. §2's
+`ready/{ref}`-specific steps stay raw `git` for exactly that reason —
+everything else routes through `task`.
 
 **Do all scratch/temp work under `/tmp/<your session id>/`** — call the
 `session-info` tool to get it, and create the directory yourself before
@@ -182,70 +186,72 @@ failure and report `needs-architect-intervention` (§6).
 and is branch-protected against direct pushes.** Your own build commit
 goes on a separate `ready/{ref}` branch, created off `build/{ref}` — this
 is what you push and raise the Main Gate PR from, never `build/{ref}`
-itself.
+itself. `task status` runs `fetch()` itself before deriving anything
+(§1.1); the raw `git` steps below fetch their own specific refs as they
+go, so there's no separate upfront fetch step either.
 
-```bash
-# 1. Worktree must be clean. Any output here = STOP.
-git status --porcelain
+1. **Worktree must be clean.** `git status --porcelain` — any output is
+   STOP.
 
-# 2. Get current remote state.
-git fetch --all --prune
+2. **Sanity-check the ref hasn't already moved past build.** Call `task`
+   with `status --json`. A `merged-pending-cleanup` or `not-initialised`
+   state here means the task has already progressed beyond where you
+   expect — that's `phase-changed` (§6), not something to push through.
+   Otherwise this is informational; the derivation doesn't model
+   `ready/{ref}` (§1), so it can't tell you what to do next — steps 3-5
+   below do that, in raw `git`.
 
-# 3. Advance local main to match origin/main. Local main does not track
-#    the remote automatically, and other worktrees/sessions sharing this
-#    checkout can leave it stale — anything that reasons about local
-#    main (yours or a human's) should not trust it without this.
-git branch -f main origin/main
+3. **BEGIN** (`ready/{ref}` doesn't exist locally or on origin — the
+   Build Gate PR has merged) **or RESUME** (`ready/{ref}` exists):
+   ```bash
+   # BEGIN:
+   git switch -c ready/{ref} origin/build/{ref}
+   # RESUME:
+   git switch ready/{ref}
+   ```
 
-# 4a. BEGIN (ready/{ref} does not exist locally or on origin — the Build Gate PR has merged):
-git switch -c ready/{ref} origin/build/{ref}
+4. **Confirm `origin/build/{ref}` is still your base.** No output = OK.
+   ```bash
+   git merge-base --is-ancestor origin/build/{ref} ready/{ref} && echo OK
+   ```
+   A failure here means the spec+test history you branched from has moved
+   on — either a second Build Gate PR merged cleanly, or (if that PR is
+   itself stuck/conflicting on GitHub) `spec/{ref}` was amended and
+   `test/{ref}` rebased forward without `origin/build/{ref}` ever
+   advancing. Either way your work needs reordering onto the current
+   source of truth — never resolve this with a plain `git rebase`.
 
-# 4b. RESUME (ready/{ref} exists locally):
-git switch ready/{ref}
+5. **Only if step 4 failed** — transplant your own commit(s) onto the
+   current spec+test tip. Do NOT run a plain `git rebase <upstream>`:
+   your `ready/{ref}` still contains the OLD spec/test commits in its own
+   history, and a plain rebase replays ALL of them (old spec, old test,
+   then yours) onto the new base — producing duplicate/conflicting spec
+   and test commits, not a clean 3-commit history.
+   ```bash
+   # First confirm how many commits are your own (should be exactly 1 —
+   # squash first, per §5, if not):
+   git log --oneline origin/build/{ref}..ready/{ref}
 
-# 5. Confirm origin/build/{ref} is still your base. No output = OK.
-#    A failure here means the spec+test history you branched from has
-#    moved on — either a second Build Gate PR merged cleanly, or (if that
-#    PR is itself stuck/conflicting on GitHub) spec/{ref} was amended and
-#    test/{ref} rebased forward without origin/build/{ref} ever advancing.
-#    Either way your work needs reordering onto the current source of
-#    truth — never resolve this with a plain `git rebase`.
-git merge-base --is-ancestor origin/build/{ref} ready/{ref} && echo OK
+   # Then transplant just that commit onto whichever branch actually has
+   # the current spec+test — origin/build/{ref} if the newer Build Gate
+   # PR merged cleanly, or test/{ref} directly if that PR is itself
+   # stuck/conflicting (it will become moot once you push):
+   git rebase --onto <origin/build/{ref}-or-test/{ref}> HEAD~1
+   ```
+   Because your own commit(s) never touch `test/**` or the spec doc, this
+   transplant should apply with no git-level conflict. If the tests now
+   fail against your existing implementation, that's ordinary working
+   information — update your implementation to satisfy them (§4), same as
+   any other failing test. If the transplant itself DOES report a git
+   conflict (meaning one of your own commits touched a file the new
+   spec/test also changed — shouldn't happen given §3's exclusions, but if
+   it does), STOP. Do not resolve it. Report `rebase-required` (§6).
 
-# 6. Only if step 5 failed — transplant your own commit(s) onto the
-#    current spec+test tip. Do NOT run a plain `git rebase <upstream>`:
-#    your ready/{ref} still contains the OLD spec/test commits in its own
-#    history, and a plain rebase replays ALL of them (old spec, old test,
-#    then yours) onto the new base — producing duplicate/conflicting
-#    spec and test commits, not a clean 3-commit history.
-#
-#    First confirm how many commits are your own (should be exactly 1 —
-#    squash first, per §5, if not):
-git log --oneline origin/build/{ref}..ready/{ref}
-#
-#    Then transplant just that commit onto whichever branch actually has
-#    the current spec+test — origin/build/{ref} if the newer Build Gate
-#    PR merged cleanly, or test/{ref} directly if that PR is itself
-#    stuck/conflicting (it will become moot once you push):
-git rebase --onto <origin/build/{ref}-or-test/{ref}> HEAD~1
-#    Because your own commit(s) never touch test/** or the spec doc, this
-#    transplant should apply with no git-level conflict. If the tests now
-#    fail against your existing implementation, that's ordinary working
-#    information — update your implementation to satisfy them (§4), same
-#    as any other failing test.
-#    If the transplant itself DOES report a git conflict (meaning one of
-#    your own commits touched a file the new spec/test also changed —
-#    shouldn't happen given §3's exclusions, but if it does), STOP. Do
-#    not resolve it. Report `rebase-required` (§6).
-
-# 7. Confirm your own commit count beyond origin/build/{ref} — 0 on a fresh
-#    Begin, 1 once you've committed.
-git log --oneline origin/build/{ref}..ready/{ref}
-
-# 8. Confirm 3 commits total between ready/{ref} and main (spec, test, yours)
-#    once you've committed. 2 before you start.
-git log --oneline main..ready/{ref}
-```
+   Commit-count bookkeeping (exactly 1 of yours beyond `origin/build/{ref}`,
+   3 total between `ready/{ref}` and `main` once committed) is what
+   `main-gate` checks at verification time (§4) — no separate manual
+   count needed here beyond the one step 5 itself requires to pick the
+   transplant target correctly.
 
 ## 3. What You Write
 
@@ -414,7 +420,7 @@ the gate and need the architect's override plus a spec revision.
 }
 ```
 
-**`rebase-required`** — step 6 of the start protocol hit a conflict or an
+**`rebase-required`** — step 5 of the start protocol hit a conflict or an
 unexpected commit count. WIP-commit first (§5), then report.
 
 ```json
