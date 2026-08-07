@@ -27,6 +27,14 @@
  * checkout and always reports `fixed: false` — the file as a whole still
  * fails the gate through §3.6, and §3.7 pins the no-op contract so the
  * build phase cannot over-fix (e.g. blindly checking out on every --fix).
+ *
+ * Correction (architect fix, task/MAG-49 prerequisite): §3.7's caught-up
+ * fall-through now resolves local-vs-origin direction via `git.isAncestor`,
+ * not a `headSha` comparison (MAG-49 corrected `derivePrState`'s
+ * build-phase merged-PR handling — see task-MAG-49.md §3 correction).
+ * `isAncestor` was a throw-mock here, which was correct only while nothing
+ * on this path consulted it; it now resolves `true` (origin is an ancestor
+ * of local — the caught-up/equal case).
  */
 
 // Implements: task-MAG-46-18-init-status-ref-flag-variants-spec.md
@@ -131,7 +139,11 @@ function buildTools(
       hasCommitsBeyond,
       headCommitTitle,
       isDirty: vi.fn().mockResolvedValue(false),
-      isAncestor: unexpected("isAncestor"),
+      // §3.7's caught-up case now resolves local-vs-origin direction via
+      // isAncestor rather than headSha (MAG-49 correction) — origin is an
+      // ancestor of local (equal), so `true` is the correct value; §3.6
+      // never reaches this call (PR-driven, no local build/{ref} yet).
+      isAncestor: vi.fn().mockResolvedValue(true),
       createBranch: unexpected("createBranch"),
       checkout,
       commitAll: unexpected("commitAll"),

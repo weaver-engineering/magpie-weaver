@@ -5,7 +5,7 @@
  * local `build/{ref}` doesn't yet reflect it (task-MAG-46-12-status-merged-
  * pending-pull-spec.md, LLD §3.2).
  *
- * Three behaviors under test, kept separate per §3.1-§3.3:
+ * Four behaviors under test, kept separate per §3.1-§3.4:
  *   1. Merged Build Gate PR + no local `build/{ref}` at all -> phase
  *      `build`, state `merged-pending-pull` (§3.1).
  *   2. Merged Build Gate PR + local `build/{ref}` behind
@@ -15,6 +15,12 @@
  *      `origin/build/{ref}` -> **not** `merged-pending-pull`; the state
  *      falls through to MAG-46-06's ordinary derivation (not-started /
  *      work-in-progress / ready?) applied to the build phase (§3.3).
+ *   4. Merged Build Gate PR + local `build/{ref}` carrying its own commit
+ *      AND `origin/build/{ref}` independently advanced past the same fork
+ *      point -> genuine divergence: falls through to the ordinary
+ *      derivation same as §3.3, but *also* surfaces `taskStatus.rebase`
+ *      as a build-phase trunk-drift trigger (§3.4, MAG-49 task/MAG-49
+ *      prerequisite — new behavior, not previously derivable at all).
  *
  * Two §2.1 contracts asserted explicitly:
  *   - The derivation compares `test/{ref}`'s current HEAD against the
@@ -58,6 +64,33 @@
  * §2.1), so `status` cannot yet report `merged-pending-pull` — it exits 1
  * with "not implemented" instead. (The still-deferred merged Main Gate
  * pairs remain in defers-when-gate-pr-exists.test.ts, owned by MAG-46-15.)
+ *
+ * **Correction (architect fix, task/MAG-49 prerequisite):** §3.2's
+ * local-behind-origin distinction was originally driven by a plain
+ * `headSha` inequality, which cannot tell "local trails origin" apart from
+ * "local carries its own commit(s) beyond origin" — a distinction that
+ * didn't matter until MAG-49 introduced the second case (build-implementer
+ * committing straight to `build/{ref}`). `derivePrState` now resolves the
+ * direction via `git.isAncestor`, so §3.2's fixture needs an `isAncestor`
+ * double that actually represents "behind" (origin not reachable from
+ * local, local reachable from origin) rather than the file's prior
+ * unconditional-`true` default, which happened to be irrelevant only
+ * because nothing consulted it yet. §3.1 and §3.3 are unaffected: §3.1
+ * never reaches the branch (no local `build/{ref}` at all), and §3.3's
+ * "caught up" scenario is still correctly `true` under the default (an
+ * equal SHA is its own ancestor). See task-MAG-49.md §3 correction for the
+ * full derivation and why the equality check made `build::ready`
+ * unreachable.
+ *
+ * §3.4 is new coverage, not a fixture correction: genuine build-phase
+ * trunk drift (`taskStatus.rebase` populated for `phase: "build"`) was
+ * not derivable *at all* before the same fix — `derivePrState`'s old
+ * equality check had no way to distinguish "diverged" from "behind", so
+ * every scenario that should surface drift instead reported
+ * `merged-pending-pull`. Added as a system-level `status` test (not a
+ * unit test reaching for line coverage) because the observable contract
+ * that matters is `taskStatus.rebase`'s shape through the real CLI
+ * dispatch path, the same thing §3.1-§3.3 already assert on.
  */
 
 // Implements: task-MAG-46-12-status-merged-pending-pull-spec.md
@@ -111,6 +144,18 @@ function headShaFor(map: Record<string, string>): Mock {
   });
 }
 
+/** An `isAncestor` double resolving `true` for exactly the given
+ *  (ancestor, descendant) pairs and `false` for everything else — the
+ *  MAG-49 correction's direction-sensitive replacement for the file's
+ *  former unconditional-`true` default, needed wherever a scenario must
+ *  represent a genuine "local behind origin" relationship rather than
+ *  "equal" (which a blanket `true` still models correctly). */
+function isAncestorFor(truePairs: ReadonlyArray<readonly [string, string]>): Mock {
+  return vi.fn().mockImplementation((ancestor: string, descendant: string) =>
+    truePairs.some(([a, d]) => a === ancestor && d === descendant),
+  );
+}
+
 /** A `findMergedPR` double that reports the given merged PR summary for
  *  exactly one base/head pair and `null` for every other pair. */
 function mergedPRFor(
@@ -130,9 +175,6 @@ const TEST_HEAD = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
  *  `build/{ref}` is behind `origin/build/{ref}`. */
 const LOCAL_BUILD_HEAD = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const ORIGIN_BUILD_HEAD = "cccccccccccccccccccccccccccccccccccccccc";
-
-/** §3.3's caught-up build HEAD — local equals origin. */
-const CAUGHT_UP_HEAD = "dddddddddddddddddddddddddddddddddddddddd";
 
 /** A fully-shaped `MergedPullRequestSummary` (gh.ts §4.9) recording
  *  `headRefOid` == the test branch's current HEAD (the ordinary-merge case
@@ -185,6 +227,7 @@ function buildTools(
     currentBranch?: Mock;
     findMergedPR?: Mock;
     hasCommitsBeyond?: Mock;
+    isAncestor?: Mock;
   },
 ): MockSet {
   const fetch = vi.fn().mockResolvedValue(undefined);
@@ -193,7 +236,10 @@ function buildTools(
   const headSha = overrides.headSha;
   const hasCommitsBeyond = overrides.hasCommitsBeyond ?? vi.fn().mockResolvedValue(false);
   const headCommitTitle = vi.fn().mockResolvedValue("");
-  const isAncestor = vi.fn().mockResolvedValue(true);
+  // Default true correctly models "equal" (a commit is its own ancestor) —
+  // only a genuinely-behind scenario (§3.2) needs a direction-sensitive
+  // override (MAG-49 correction, see file header).
+  const isAncestor = overrides.isAncestor ?? vi.fn().mockResolvedValue(true);
   const findMergedPR =
     overrides.findMergedPR ?? mergedPRFor([`build/${ref}`, `test/${ref}`], mergedBuildGatePR());
   const findMergedPRs = vi.fn().mockResolvedValue([]);
@@ -365,6 +411,10 @@ describe("status: merged Build Gate PR with local build/{ref} behind origin (§3
         "build/AAA-124": LOCAL_BUILD_HEAD,
         "origin/build/AAA-124": ORIGIN_BUILD_HEAD,
       }),
+      // Genuinely behind, not diverged and not ahead (MAG-49 correction):
+      // origin/build/AAA-124 is NOT reachable from build/AAA-124, but
+      // build/AAA-124 IS reachable from origin/build/AAA-124.
+      isAncestor: isAncestorFor([["build/AAA-124", "origin/build/AAA-124"]]),
     });
     const { code, stdout } = await runStatus(["status", "--ref", "AAA-124", "--json"], tools);
 
@@ -379,10 +429,12 @@ describe("status: merged Build Gate PR with local build/{ref} behind origin (§3
     // The headRefOid comparison is still made (§2.1), via the
     // remote-tracking ref...
     expect(mocks.headSha).toHaveBeenCalledWith("origin/test/AAA-124");
-    // ...and the local-vs-origin comparison decides the state: local
-    // build/{ref} trails origin/build/{ref}, so the merge is pending a pull.
-    expect(mocks.headSha).toHaveBeenCalledWith("build/AAA-124");
-    expect(mocks.headSha).toHaveBeenCalledWith("origin/build/AAA-124");
+
+    // ...and the local-vs-origin direction is now resolved via isAncestor
+    // (MAG-49 correction), not a plain headSha comparison: local behind
+    // origin means the merge is pending a pull.
+    expect(mocks.isAncestor).toHaveBeenCalledWith("origin/build/AAA-124", "build/AAA-124");
+    expect(mocks.isAncestor).toHaveBeenCalledWith("build/AAA-124", "origin/build/AAA-124");
 
     // PR-driven: ordinary branch-exists derivation is never reached.
     expect(mocks.hasCommitsBeyond).not.toHaveBeenCalled();
@@ -402,9 +454,9 @@ describe("status: merged Build Gate PR with local build/{ref} already caught up 
       branchExists: existsOnly("spec/AAA-125", "test/AAA-125", "build/AAA-125"),
       headSha: headShaFor({
         "origin/test/AAA-125": TEST_HEAD,
-        "build/AAA-125": CAUGHT_UP_HEAD,
-        "origin/build/AAA-125": CAUGHT_UP_HEAD,
       }),
+      // Caught up (equal) — origin IS an ancestor of local (MAG-49
+      // correction: default `true` already models this correctly).
     });
     const { code, stdout } = await runStatus(["status", "--ref", "AAA-125", "--json"], tools);
 
@@ -422,8 +474,11 @@ describe("status: merged Build Gate PR with local build/{ref} already caught up 
     // The headRefOid comparison is still made (§2.1), via the
     // remote-tracking ref...
     expect(mocks.headSha).toHaveBeenCalledWith("origin/test/AAA-125");
-    expect(mocks.headSha).toHaveBeenCalledWith("build/AAA-125");
-    expect(mocks.headSha).toHaveBeenCalledWith("origin/build/AAA-125");
+
+    // ...and the local-vs-origin direction is resolved via isAncestor
+    // (MAG-49 correction), not headSha: origin is an ancestor of local
+    // (equal), so this is not merged-pending-pull.
+    expect(mocks.isAncestor).toHaveBeenCalledWith("origin/build/AAA-125", "build/AAA-125");
 
     // The fall-through runs the ordinary build-phase derivation against the
     // build phase's own parent (origin/build/{ref}); with no commits beyond
@@ -433,6 +488,69 @@ describe("status: merged Build Gate PR with local build/{ref} already caught up 
     expect(mocks.gateRun).not.toHaveBeenCalled();
 
     // status only reports; it never resolves — even in the fall-through case.
+    expect(mocks.pullFastForward).not.toHaveBeenCalled();
+    expect(mocks.rebase).not.toHaveBeenCalled();
+    expect(mocks.checkout).not.toHaveBeenCalled();
+  });
+});
+
+describe("status: merged Build Gate PR with local build/{ref} diverged from origin (§3.4)", () => {
+  it("falls through to the ordinary build-phase derivation AND surfaces a build-phase trunk-drift rebase trigger", async () => {
+    const { tools, mocks } = buildTools("AAA-126", {
+      branchExists: existsOnly("spec/AAA-126", "test/AAA-126", "build/AAA-126"),
+      headSha: headShaFor({
+        "origin/test/AAA-126": TEST_HEAD,
+      }),
+      // Genuine divergence, not "behind" (§3.2) and not "ahead/equal"
+      // (§3.3): NEITHER direction is an ancestor of the other — local
+      // carries its own commit beyond a shared fork point, and
+      // origin/build/AAA-126 has independently advanced past that same
+      // fork point (a second Build Gate PR merged cleanly while this
+      // session was open, task-MAG-49.md §3).
+      isAncestor: isAncestorFor([]),
+      // Local carries its own commit relative to the build phase's
+      // parent (origin/build/{ref}) — the ordinary derivation this falls
+      // through to must still see real work, not not-started.
+      hasCommitsBeyond: vi.fn().mockResolvedValue(true),
+    });
+    const { code, stdout } = await runStatus(["status", "--ref", "AAA-126", "--json"], tools);
+
+    expect(code).toBe(0);
+    expect(stdout).toContain("Task::Phase::State AAA-126::build::ready?");
+
+    const json = parseJson(stdout);
+    expect(json.success).toBe(true);
+    expect(json.result.taskStatus.phase).toBe("build");
+    // Divergence is NOT merged-pending-pull — it falls through to the same
+    // ordinary derivation §3.3 does.
+    expect(json.result.taskStatus.state).not.toBe("merged-pending-pull");
+    expect(json.result.taskStatus.state).toBe("ready?");
+
+    // The headRefOid comparison is still made (§2.1)...
+    expect(mocks.headSha).toHaveBeenCalledWith("origin/test/AAA-126");
+
+    // ...and BOTH isAncestor directions were checked — neither alone
+    // distinguishes "diverged" from "behind" (§3.2) or "ahead" (§3.3);
+    // only checking both does.
+    expect(mocks.isAncestor).toHaveBeenCalledWith("origin/build/AAA-126", "build/AAA-126");
+    expect(mocks.isAncestor).toHaveBeenCalledWith("build/AAA-126", "origin/build/AAA-126");
+
+    // The fall-through runs the ordinary build-phase derivation against
+    // the build phase's own parent (origin/build/{ref}).
+    expect(mocks.hasCommitsBeyond).toHaveBeenCalledWith("build/AAA-126", "origin/build/AAA-126");
+    expect(mocks.gateRun).not.toHaveBeenCalled();
+
+    // The real new behavior this scenario exists to prove: divergence
+    // surfaces as a build-phase trunk-drift rebase trigger, in the exact
+    // shape the existing generic rebase-forward mechanism (spec/quick's
+    // own trunk drift) already consumes.
+    expect(json.result.taskStatus.rebase).toEqual({
+      branch: "build/AAA-126",
+      onto: "origin/build/AAA-126",
+    });
+
+    // status only reports; it never resolves — divergence is surfaced,
+    // not silently rebased by a plain status read.
     expect(mocks.pullFastForward).not.toHaveBeenCalled();
     expect(mocks.rebase).not.toHaveBeenCalled();
     expect(mocks.checkout).not.toHaveBeenCalled();
