@@ -30,6 +30,13 @@
  * yet. `git.createBranch`/`git.checkout` are *stateful* doubles so the
  * re-derived post-fork status (test exists, spec ancestor) falls out of the
  * same mock set the way it would on a real worktree.
+ *
+ * **Correction (MAG-50):** §3.2's blocked case originally asserted exit 0 /
+ * `success: true` — a `blocked` result was treated as a successfully-
+ * determined outcome. Corrected: `promote`'s whole job is to promote: a
+ * `blocked` state means that did not happen, so it's a failed invocation
+ * (exit 1 / `success: false`) even though no systematic error occurred
+ * determining it. No git-action or violation-relay behavior changed.
  */
 
 // Implements: task-MAG-46-10-promote-forked-spec.md
@@ -302,7 +309,7 @@ describe("promote: forks a ready spec phase into test (§3.1)", () => {
 });
 
 describe("promote: blocked spec phase performs no action (§3.2)", () => {
-  it("takes no git action and relays the gate's own violation verbatim, exit 0", async () => {
+  it("takes no git action and relays the gate's own violation verbatim, exit 1 (MAG-50)", async () => {
     const { tools, mocks } = buildForkTools({
       gateRun: gateRun({
         passed: false,
@@ -320,10 +327,11 @@ describe("promote: blocked spec phase performs no action (§3.2)", () => {
     expect(mocks.gateRun).toHaveBeenCalledTimes(1);
     expect(mocks.gateRun).toHaveBeenCalledWith("spec", { ref: "AAA-123" });
 
-    // A successfully-determined blocked result: action is none, exit 0.
+    // MAG-50: blocked means promote did not do what was asked - action
+    // none, exit 1, success false (was exit 0 / success true).
     expect(doc.result.action).toBe("none");
-    expect(code).toBe(0);
-    expect(doc.result.success).toBe(true);
+    expect(code).toBe(1);
+    expect(doc.result.success).toBe(false);
 
     // The gate's own violation text is surfaced directly.
     expect(doc.result.violation).toBe("spec must define at least one behavior");
