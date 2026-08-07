@@ -29,6 +29,21 @@ import { deriveRepoState, resolveReady } from "../lib/repo-state.js";
  * / awaiting-pr / merged-pending-* / the test->build and build->main hops)
  * belongs to later chunks and defers.
  *
+ * MAG-49 (this chunk) closes the last remaining ready hop — the
+ * `build::ready -> pr-raised` action named by the fallthrough comment below:
+ * once local `build/{ref}` resolves `ready` (the build gate passes against
+ * the local worktree's own commits, no push first), create `ready/{ref}`
+ * from `build/{ref}`'s HEAD, push it, raise the Main Gate PR
+ * (`ready/{ref}` -> `main`), and restore the starting branch. Modeled on
+ * `quick::ready -> pr-raised` (its destination `main` always exists) plus
+ * the one step neither template needs: creating `ready/{ref}` itself. A
+ * pre-existing `origin/ready/{ref}` is either a safe-to-discard stale
+ * attempt (deleted, then recreated fresh) or already-merged history
+ * (refused cleanly — never silently overwritten). Trunk drift on the build
+ * phase and a `blocked` build-phase gate need no new code: the generic
+ * rebase-forward block and the generic blocked-relay branch (both below)
+ * already cover `build` unchanged.
+ *
  * The phase/state/canonicalBranch/branchMismatch derivation is
  * `deriveRepoState()` from `lib/repo-state.ts` — the same function `status`
  * calls, not a private re-derivation — and `ready?` resolution is
@@ -512,6 +527,66 @@ export async function promote(
     const pr = await tools.github.createPR("main", headBranch, {
       title: `Task ${ref}: promote ${ref}::quick::ready to main (Main Gate)`,
     });
+    return {
+      success: true,
+      action: "pr-raised",
+      prNumber: pr.number,
+      prUrl: pr.url,
+      messages: [
+        `Current branch \`${currentBranch}\` - ref: ${ref}`,
+        stateLine(ref, taskStatus.phase, taskStatus.state),
+        `PR #${pr.number} opened for ${ref}: ${pr.url}`,
+      ],
+    };
+  }
+
+  // The build::ready -> pr-raised action (task-MAG-49, §3.1/§3.5/§3.6):
+  // raise the Main Gate PR (`ready/{ref}` -> `main`) once local
+  // `build/{ref}` resolves `ready` (the build gate passes against the local
+  // worktree's own commits — no push required first, matching main-gate.ts's
+  // existing local-`build/{ref}`-equals-`ready/{ref}` self-verification
+  // design). Modeled on quick::ready -> pr-raised (the destination `main`
+  // always exists, so there is no branch-publish step) plus one step neither
+  // template needs: create `ready/{ref}` from `build/{ref}`'s current HEAD
+  // before pushing — carrying the actual accumulated build commits, not an
+  // empty branch off `origin/main`.
+  //
+  // A pre-existing `origin/ready/{ref}` needs one safety check before being
+  // touched: `isAncestor("origin/ready/{ref}", "origin/main")`. If true —
+  // its content is already part of `main`'s history — touching it would
+  // clobber merged history, so refuse cleanly (success false, action none,
+  // no git mutation, §3.6). If false — a stale, unmerged leftover (the old
+  // raw-`git` workflow or an interrupted `promote` attempt) — discard it
+  // with `deleteBranch` first, then proceed through the normal happy path
+  // unchanged; deleting also auto-closes any stale open PR against the old
+  // branch on GitHub, so the subsequent `createPR` never collides with a
+  // leftover PR (§3.5). When `origin/ready/{ref}` doesn't exist at all, the
+  // check is skipped entirely.
+  if (taskStatus.state === "ready" && taskStatus.phase === "build") {
+    const buildBranch = taskStatus.canonicalBranch as string;
+    const readyBranch = `ready/${ref}`;
+    if (await tools.git.branchExists(readyBranch, { remote: true })) {
+      if (await tools.git.isAncestor(`origin/${readyBranch}`, "origin/main")) {
+        return {
+          success: false,
+          action: "none",
+          messages: [
+            `Current branch \`${currentBranch}\` - ref: ${ref}`,
+            `Cannot promote: \`${readyBranch}\` already exists and is already merged into \`main\``,
+            `No action taken`,
+          ],
+        };
+      }
+      await tools.git.deleteBranch(readyBranch);
+    }
+    await tools.git.createBranch(readyBranch, buildBranch);
+    await tools.git.push(readyBranch);
+    const pr = await tools.github.createPR("main", readyBranch, {
+      title: `Task ${ref}: promote ${ref}::build::ready to main (Main Gate)`,
+    });
+    // createBranch checks the new branch out (`git checkout -b`), so the
+    // caller's starting branch is explicitly restored afterward (§3.2).
+    await tools.git.checkout(buildBranch);
     return {
       success: true,
       action: "pr-raised",
