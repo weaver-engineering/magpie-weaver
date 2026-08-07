@@ -84,6 +84,7 @@ permission:
     "gh api repos/weaver-engineering/magpie-weaver/collaborators/*/permission*": allow
     "gh api -X POST repos/weaver-engineering/magpie-weaver/pulls/*/requested_reviewers*": allow
     "pnpm gate-check*": allow
+    "pnpm exec gate-check*": allow
     "pnpm task*": allow
     "pnpm test*": allow
     "pnpm --filter*": allow
@@ -114,6 +115,7 @@ permission:
     "sort *": allow
     "mktemp *": allow
     "tr *": allow
+    "cut *": allow
     "cat *": allow
     "diff *": allow
     "echo *": allow
@@ -150,14 +152,12 @@ outgrown this route (§3).
 The `gate-check` tool (§4) wraps `pnpm gate-check` and is preferable to
 shelling out to it directly.
 
-A second tool, `task`, wraps `pnpm task <command> [...args]` — but **do
-not use it to derive phase/state yet.** `task status` defers with "not
-implemented" for any ref that already has a merged gate PR, which is
-true of every ref partway through a chunked task, so it cannot answer
-for the task you are working on. It becomes usable from MAG-46-16
-onward, once the merged-PR states land. Until then use the raw `git`
-checks in §2. `list`/`promote`/`ref` are unimplemented placeholders —
-check the task doc's "Current Scope" section for what's actually landed.
+A second tool, `task`, wraps `pnpm task <command> [...args]` — **this is
+now the primary way to check and act on phase/state** (MAG-46 shipped
+all 18 chunks; `status`/`init`/`list`/`promote`/`wip`/`<ref>` are all
+real, fully-flagged implementations, not placeholders). §2 below is
+built on it. Reasoning about branches with raw `git` commands instead
+is a step backward, not a fallback.
 
 **Do all scratch/temp work under `/tmp/<your session id>/`** — call the
 `session-info` tool to get it, and create the directory yourself before
@@ -172,39 +172,40 @@ work before it merges.
 ## 2. Session Start Protocol
 
 Run these in order, every session, before any edit. Stop at the first
-failure and report `needs-architect-intervention` (§6).
+failure and report `needs-architect-intervention` (§6). `task status`
+runs `fetch()` itself before deriving anything (§1.1) — you never need a
+separate fetch step, and `init`/`promote` fetch fresh state too.
 
-```bash
-# 1. Worktree must be clean. Any output here = STOP.
-git status --porcelain
+1. **Worktree must be clean.** `git status --porcelain` — any output is
+   STOP (this is the one step with no `task`-tool equivalent — the
+   derivation pipeline doesn't check worktree cleanliness).
 
-# 2. Get current remote state.
-git fetch --all --prune
+2. **Derive current state.** Call `task` with `status --json`.
 
-# 3. Advance local main to match origin/main. Local main does not track
-#    the remote automatically, and other worktrees/sessions sharing this
-#    checkout can leave it stale — step 4a below branches directly off
-#    local main, so a stale local main means building on stale content,
-#    not just a misleading check.
-git branch -f main origin/main
+3. **Resolve a rebase, if `taskStatus.rebase` is present** — `main` has
+   drifted ahead of `task/{ref}` since you last worked it. Call `task`
+   with `promote --confirm-rebase --json` (always pass `--confirm-rebase`
+   directly — there's no interactive terminal in this session for the
+   y/N prompt). `rebaseOutcome.status === "conflict"` is STOP: do not
+   resolve it, report `rebase-required` (§6). `"unexpected-commit-count"`
+   means you already have more than one commit — squash first (§5), then
+   retry from step 2.
 
-# 4a. BEGIN (task/{ref} does not exist yet):
-git switch -c task/{ref} main
+4. **BEGIN — `task/{ref}` doesn't exist yet:** call `task` with
+   `init {ref} --quick --title "<a reasonable title from your prompt's
+   task context>" --json`. This both creates `task/{ref}` off `main` and
+   scaffolds a starter task doc — you'll rewrite the doc's actual content
+   in §3, this just gives you a real file to start from. Use `--doc
+   <path>` instead of `--title` if a task doc already exists to copy in
+   rather than scaffold fresh.
 
-# 4b. RESUME (task/{ref} exists):
-git switch task/{ref}
+5. **RESUME — `task/{ref}` exists:** call `task` with the bare ref
+   itself, e.g. `AAA-001` (the `<ref>`-switch command), to make sure
+   you're actually on it.
 
-# 5. Confirm main is still your base. No output = OK.
-git merge-base --is-ancestor main task/{ref} && echo OK
-
-# 6. Only if step 5 failed — main has drifted ahead. Rebase forward:
-git rebase main
-#    If this reports a conflict, STOP. Do not resolve it. Report `rebase-required` (§6).
-#    If you have more than one commit, STOP. Squash first (§5), then retry.
-
-# 7. Confirm exactly 1 commit of yours beyond main (or 0 on a fresh Begin).
-git log --oneline main..task/{ref}
-```
+6. **Confirm you landed correctly.** Call `task` with `status --json`
+   again: `taskStatus.phase` must be `"quick"` and `branchMismatch` must
+   be `false`. Anything else is `needs-architect-intervention` (§6).
 
 ## 3. What You Write
 
@@ -365,7 +366,7 @@ debugging, or writing more code.
 }
 ```
 
-**`rebase-required`** — step 6 of the start protocol hit a conflict or an
+**`rebase-required`** — step 3 of the start protocol hit a conflict or an
 unexpected commit count. WIP-commit first (§5), then report.
 
 ```json
