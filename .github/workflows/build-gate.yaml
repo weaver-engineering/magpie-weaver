@@ -3,8 +3,9 @@ name: Build Gate
 # Build Gate: PR from test/{ref} -> build/{ref}
 # Thin wrapper around `pnpm gate-check build-gate` — the single source of
 # truth for the actual validation logic (spec/test commit structure,
-# fail-then-pass, coverage thresholds, and a real `tsc` build). See
-# packages/gate-checks for the implementation; nothing here re-derives it.
+# fail-then-pass, coverage thresholds, and a real `tsc` build). See the
+# published `@weaver-engineering/gate-checks` package for the
+# implementation; nothing here re-derives it.
 # Human approval (required reviewers) and human override (admin bypass of a
 # failing required check) are configured in branch protection, not here.
 
@@ -21,6 +22,7 @@ permissions:
   contents: read
   pull-requests: write
   statuses: write
+  packages: read
 
 jobs:
   validate-build-gate:
@@ -43,15 +45,15 @@ jobs:
         with:
           node-version-file: '.nvmrc'
           cache: 'pnpm'
+          registry-url: 'https://npm.pkg.github.com'
 
       - name: Install dependencies
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm install --frozen-lockfile
 
       - name: Build every package
         run: pnpm -r build
-
-      - name: Reinstall to link workspace bins (dist/ now exists)
-        run: rm -rf node_modules && pnpm install --frozen-lockfile
 
       - name: Run Build Gate
         env:

@@ -210,15 +210,15 @@ importers:
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.7.0(supports-color@8.1.1))
-      '@magpieweaver/gate-checks':
-        specifier: workspace:*
-        version: link:packages/gate-checks
-      '@magpieweaver/task-phases':
-        specifier: workspace:*
-        version: link:packages/task-phases
       '@types/node':
         specifier: ^26.1.1
         version: 26.1.1
+      '@weaver-engineering/gate-checks':
+        specifier: ^0.1.1
+        version: 0.1.1(supports-color@8.1.1)
+      '@weaver-engineering/task-phases':
+        specifier: ^0.2.0
+        version: 0.2.0(supports-color@8.1.1)
       eslint:
         specifier: ^10.7.0
         version: 10.7.0(supports-color@8.1.1)
@@ -323,28 +323,6 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@26.1.1)(@vitest/coverage-v8@4.1.10)(vite@8.1.5(@types/node@26.1.1)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0))
 
-  packages/gate-checks:
-    dependencies:
-      commander:
-        specifier: ^15.0.0
-        version: 15.0.0
-      simple-git:
-        specifier: ^3.36.0
-        version: 3.36.0(supports-color@8.1.1)
-    devDependencies:
-      '@types/node':
-        specifier: ^26.1.1
-        version: 26.1.1
-      '@vitest/coverage-v8':
-        specifier: ^4.1.10
-        version: 4.1.10(vitest@4.1.10)
-      typescript:
-        specifier: ^7.0.2
-        version: 7.0.2
-      vitest:
-        specifier: ^4.1.10
-        version: 4.1.10(@types/node@26.1.1)(@vitest/coverage-v8@4.1.10)(vite@8.1.5(@types/node@26.1.1)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0))
-
   packages/gitdatastore:
     dependencies:
       simple-git:
@@ -379,25 +357,6 @@ importers:
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
-
-  packages/task-phases:
-    dependencies:
-      '@magpieweaver/gate-checks':
-        specifier: workspace:*
-        version: link:../gate-checks
-      simple-git:
-        specifier: ^3.36.0
-        version: 3.36.0(supports-color@8.1.1)
-    devDependencies:
-      '@types/node':
-        specifier: ^26.1.1
-        version: 26.1.1
-      typescript:
-        specifier: ^7.0.2
-        version: 7.0.2
-      vitest:
-        specifier: ^4.1.10
-        version: 4.1.10(@types/node@26.1.1)(@vitest/coverage-v8@4.1.10)(vite@8.1.5(@types/node@26.1.1)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0))
 
 packages:
 
@@ -1233,6 +1192,14 @@ packages:
 
   '@vitest/utils@4.1.10':
     resolution: {integrity: sha512-fy9am/HWxbaGt/Sawrp90vt6Y6jQwf1RX77cz3uwoJwJVMli/e1IEwRPnMNJ7vKfPTwo0diXifkpPvwH9v7nGA==}
+
+  '@weaver-engineering/gate-checks@0.1.1':
+    resolution: {integrity: sha512-ZN7/yITjiAVUr5cjbx/0U2++rqlLxstFJvsbULxykvmhtzAucM8trEz3ONUAIb988VIkXybEL/T60PXNXJtVdg==, tarball: https://npm.pkg.github.com/download/@weaver-engineering/gate-checks/0.1.1/9dccd3f5146406d54ea1a6bd95f239d436633557}
+    hasBin: true
+
+  '@weaver-engineering/task-phases@0.2.0':
+    resolution: {integrity: sha512-Ek31uxTppKCWZT//DSPiV02m/tYWCfmER4gSim91lHp/N8aav9T0lf1AoChgqP+6hXEu+Vr1agWt145Q2BIVBw==, tarball: https://npm.pkg.github.com/download/@weaver-engineering/task-phases/0.2.0/f231d502a4340cb508532bccc7c77ee0fd83c36d}
+    hasBin: true
 
   abort-controller@3.0.0:
     resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
@@ -2731,7 +2698,8 @@ snapshots:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
 
-  '@bcoe/v8-coverage@1.0.2': {}
+  '@bcoe/v8-coverage@1.0.2':
+    optional: true
 
   '@electron-internal/extract-zip@1.0.4': {}
 
@@ -3325,6 +3293,7 @@ snapshots:
       std-env: 4.2.0
       tinyrainbow: 3.1.0
       vitest: 4.1.10(@types/node@26.1.1)(@vitest/coverage-v8@4.1.10)(vite@8.1.5(@types/node@26.1.1)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0))
+    optional: true
 
   '@vitest/expect@4.1.10':
     dependencies:
@@ -3366,6 +3335,20 @@ snapshots:
       '@vitest/pretty-format': 4.1.10
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
+
+  '@weaver-engineering/gate-checks@0.1.1(supports-color@8.1.1)':
+    dependencies:
+      commander: 15.0.0
+      simple-git: 3.36.0(supports-color@8.1.1)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@weaver-engineering/task-phases@0.2.0(supports-color@8.1.1)':
+    dependencies:
+      '@weaver-engineering/gate-checks': 0.1.1(supports-color@8.1.1)
+      simple-git: 3.36.0(supports-color@8.1.1)
+    transitivePeerDependencies:
+      - supports-color
 
   abort-controller@3.0.0:
     dependencies:
@@ -3423,6 +3406,7 @@ snapshots:
       '@jridgewell/trace-mapping': 0.3.31
       estree-walker: 3.0.3
       js-tokens: 10.0.0
+    optional: true
 
   atomic-sleep@1.0.0: {}
 
@@ -3834,7 +3818,8 @@ snapshots:
     dependencies:
       hermes-estree: 0.36.0
 
-  html-escaper@2.0.2: {}
+  html-escaper@2.0.2:
+    optional: true
 
   http-errors@2.0.1:
     dependencies:
@@ -3887,18 +3872,21 @@ snapshots:
 
   isexe@2.0.0: {}
 
-  istanbul-lib-coverage@3.2.2: {}
+  istanbul-lib-coverage@3.2.2:
+    optional: true
 
   istanbul-lib-report@3.0.1:
     dependencies:
       istanbul-lib-coverage: 3.2.2
       make-dir: 4.0.0
       supports-color: 7.2.0
+    optional: true
 
   istanbul-reports@3.2.0:
     dependencies:
       html-escaper: 2.0.2
       istanbul-lib-report: 3.0.1
+    optional: true
 
   jest-get-type@29.6.3: {}
 
@@ -3927,7 +3915,8 @@ snapshots:
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
-  js-tokens@10.0.0: {}
+  js-tokens@10.0.0:
+    optional: true
 
   js-tokens@4.0.0: {}
 
@@ -4045,10 +4034,12 @@ snapshots:
       '@babel/parser': 7.29.7
       '@babel/types': 7.29.7
       source-map-js: 1.2.1
+    optional: true
 
   make-dir@4.0.0:
     dependencies:
       semver: 7.8.5
+    optional: true
 
   makeerror@1.0.12:
     dependencies:
